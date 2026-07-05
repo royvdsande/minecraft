@@ -74,8 +74,13 @@ Bron van waarheid: `src/core/constants.ts`. Kort:
   block-coördinaten gelijk aan array-indices en aan schermruimte — geen
   y-flips.)
 - **Entity-posities zijn floats in BLOCK-EENHEDEN** (1 eenheid = 1 block), nooit
-  in pixels. Pixels bestaan alleen bij het renderen (`worldToScreen` in de
-  camera, komt in M1).
+  in pixels. Pixels bestaan alleen bij het renderen (`worldToScreen` in
+  `src/render/camera.ts`).
+- **Entity-anker = VOETEN-MIDDEN.** `(x, y)` van een entity is het horizontale
+  midden van het lichaam op voethoogte. Op block-rij `by` staan ⇒ `y === by`.
+  AABB: `[x - W/2, y - H] .. [x + W/2, y]`. Zie `src/entity/player.ts`.
+- **De render-scenegraph staat in block-units.** Sprites zijn 1×1; de camera
+  schaalt de wereld-container naar pixels (`pixelsPerBlock`).
 - **Chunk-index:** `chunkX = floor(bx / 16)` (`chunkXOf`). Lokale X binnen een
   chunk: `localXOf(bx)` ∈ `[0,15]`.
 - **Opslag-index binnen een chunk:** `index = localY * CHUNK_WIDTH + localX`
@@ -90,10 +95,10 @@ public/
   textures/blocks/     PNG block-textures (zie hieronder). Vite kopieert public/ 1:1.
 src/
   core/                constants, game-loop (fixed timestep), tijd
-  world/               chunk, chunk-manager, world  (vanaf M1)
-  blocks/              block-register + block-definities (data-driven) (vanaf M1)
-  render/              Pixi-app, texture-atlas, camera, chunk-renderer
-  entity/              speler, physics                (vanaf M2)
+  world/               chunk (Uint16Array-opslag); test-chunk (tijdelijk t/m M4)
+  blocks/              block-register + block-definities (data-driven)
+  render/              Pixi-app, texture-atlas, camera, chunk-view
+  entity/              speler (physics vanaf M2)
   gen/                 terreingeneratie, noise        (vanaf M4)
   input/               toetsenbord/muis               (vanaf M2/M3)
   storage/             IndexedDB save/load            (vanaf M7)
@@ -142,7 +147,8 @@ Werk milestone voor milestone. Na elke milestone: werkende build + kleine,
 reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 
 - **M0 — Scaffold** ✅ toolchain, fixed-timestep loop, Pixi-canvas, CLAUDE.md.
-- **M1** — Render één chunk met tiles + camera. Speler-sprite die stilstaat.
+- **M1** ✅ Render één chunk met tiles + camera. Speler-sprite die stilstaat.
+  (Block-register, chunk-opslag, texture-atlas + placeholders, camera.)
 - **M2** — Speler-physics: lopen, springen, zwaartekracht, collision vs solids.
 - **M3** — Block breken/plaatsen met de muis (met reach-limiet).
 - **M4** — Procedurele terreingeneratie met noise (oppervlak, aarde, steen,
@@ -156,7 +162,10 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 
 ### Huidige milestone
 
-**M0 — Scaffold: KLAAR, wacht op review.** Volgende: M1 (na akkoord).
+**M1 — één chunk + camera: KLAAR.** Volgende: M2 (speler-physics).
+
+Let op (tijdelijk): `src/world/test-chunk.ts` is hand-rolled M1-terrein en wordt
+in M4 vervangen door echte seeded noise-generatie.
 
 ---
 
