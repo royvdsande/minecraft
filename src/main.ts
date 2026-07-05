@@ -2,46 +2,83 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { createApp } from './render/app';
 import { Camera } from './render/camera';
 import { loadBlockAtlas } from './render/texture-atlas';
-import { createChunkView } from './render/chunk-view';
-import { createBlockRegistry } from './blocks/registry';
+import { ChunkView } from './render/chunk-view';
+import { createBlockRegistry, AIR } from './blocks/registry';
 import { World } from './world/world';
 import { surfaceHeightAt } from './world/test-chunk';
+import { canBreak, canPlace, withinReach, REACH } from './world/interaction';
 import { Player } from './entity/player';
 import { stepPhysics } from './entity/physics';
 import { Keyboard } from './input/keyboard';
+import { Mouse } from './input/mouse';
 import { GameLoop } from './core/loop';
-import { TICK_RATE } from './core/constants';
+import { TICK_RATE, chunkXOf, localXOf } from './core/constants';
 
-/** Chunks rendered around spawn for M2. Dynamic streaming arrives in M5. */
+/** Chunks rendered around spawn for M2/M3. Dynamic streaming arrives in M5. */
 const RENDER_RANGE = 4;
 
 /**
- * M2: the player walks, jumps, and collides with solid blocks under gravity,
- * simulated at a fixed 60 Hz and rendered with interpolation.
+ * TEMPORARY block palette (until the real hotbar/inventory in M6). Pick with
+ * number keys 1-9 or the mouse wheel; right-click places the selection.
+ */
+const PALETTE = [
+  'grass_block',
+  'dirt',
+  'stone',
+  'cobblestone',
+  'sand',
+  'gravel',
+  'oak_log',
+  'oak_planks',
+  'oak_leaves',
+];
+
+/**
+ * M3: break blocks (left-click) and place the selected block (right-click),
+ * both limited to REACH blocks from the player. Edits update the world and its
+ * chunk view live.
  */
 async function main(): Promise<void> {
   const app = await createApp();
   const registry = createBlockRegistry();
   const atlas = await loadBlockAtlas(registry.textureKeys());
   const world = new World(registry);
+  const palette = PALETTE.map((key) => ({ key, id: registry.idOf(key) }));
 
   // Static render window (block units); the camera scales it to pixels.
   const worldView = new Container();
+  const views = new Map<number, ChunkView>();
   for (let cx = -RENDER_RANGE; cx <= RENDER_RANGE; cx++) {
-    worldView.addChild(createChunkView(world.getChunk(cx), registry, atlas));
+    const view = new ChunkView(world.getChunk(cx), registry, atlas);
+    views.set(cx, view);
+    worldView.addChild(view.container);
   }
 
   const player = new Player();
   player.x = 8.5;
-  player.y = surfaceHeightAt(8); // feet on the grass surface
+  player.y = surfaceHeightAt(8);
   player.savePrev();
   const playerSprite = createPlayerSprite();
   worldView.addChild(playerSprite);
+
+  // Target-cell outline (drawn on top of everything in the world).
+  const highlight = new Graphics();
+  highlight.rect(0, 0, 1, 1).stroke({ width: 0.06, color: 0xffffff, alignment: 0.5 });
+  highlight.visible = false;
+  worldView.addChild(highlight);
 
   app.stage.addChild(worldView);
 
   const camera = new Camera(32);
   const keyboard = new Keyboard();
+  const mouse = new Mouse(app.canvas);
+
+  // Temporary block selection (until M6): number keys pick a palette slot.
+  let selected = 0;
+  window.addEventListener('keydown', (e) => {
+    const m = /^Digit([1-9])$/.exec(e.code);
+    if (m && Number(m[1]) <= palette.length) selected = Number(m[1]) - 1;
+  });
 
   const hud = new Text({
     text: '',
@@ -51,6 +88,14 @@ async function main(): Promise<void> {
   app.stage.addChild(hud);
 
   const isSolid = (bx: number, by: number): boolean => world.isSolid(bx, by);
+
+  /** Push a changed cell to its on-screen chunk view (if rendered). */
+  const refresh = (bx: number, by: number): void => {
+    views.get(chunkXOf(bx))?.update(localXOf(bx), by);
+  };
+
+  // Current mouse target, recomputed each tick for rendering the highlight.
+  let target: { bx: number; by: number; inReach: boolean } | null = null;
 
   const loop = new GameLoop({
     update: (dt) => {
@@ -68,9 +113,54 @@ async function main(): Promise<void> {
       player.vx = next.vx;
       player.vy = next.vy;
       player.grounded = next.grounded;
+
+      // Cycle selection with the wheel.
+      const wheel = mouse.takeWheelSteps();
+      if (wheel !== 0) {
+        selected = (((selected + wheel) % palette.length) + palette.length) % palette.length;
+      }
+
+      // Resolve the targeted cell and handle break/place.
+      const leftClick = mouse.takeLeftClick();
+      const rightClick = mouse.takeRightClick();
+      if (mouse.hasPosition) {
+        const wp = camera.screenToWorld(mouse.x, mouse.y);
+        const bx = Math.floor(wp.x);
+        const by = Math.floor(wp.y);
+        const originX = player.x;
+        const originY = player.y - Player.HEIGHT / 2; // reach from body center
+        const inReach = withinReach(originX, originY, bx, by);
+        target = { bx, by, inReach };
+
+        if (inReach && leftClick && canBreak(registry.byId(world.getBlock(bx, by)))) {
+          world.setBlock(bx, by, AIR);
+          refresh(bx, by);
+        }
+        if (inReach && rightClick) {
+          const sel = palette[selected];
+          const targetIsAir = world.getBlock(bx, by) === AIR;
+          if (
+            sel &&
+            canPlace(
+              targetIsAir,
+              registry.byId(sel.id).solid,
+              bx,
+              by,
+              player.x,
+              player.y,
+              Player.WIDTH,
+              Player.HEIGHT,
+            )
+          ) {
+            world.setBlock(bx, by, sel.id);
+            refresh(bx, by);
+          }
+        }
+      } else {
+        target = null;
+      }
     },
     render: (alpha) => {
-      // Interpolate between the last two simulated positions for smooth motion.
       const rx = player.prevX + (player.x - player.prevX) * alpha;
       const ry = player.prevY + (player.y - player.prevY) * alpha;
       playerSprite.position.set(rx, ry);
@@ -78,34 +168,37 @@ async function main(): Promise<void> {
       camera.viewportWidth = app.screen.width;
       camera.viewportHeight = app.screen.height;
       camera.x = rx;
-      camera.y = ry - Player.HEIGHT / 2; // frame the body, not the feet
+      camera.y = ry - Player.HEIGHT / 2;
 
       const origin = camera.worldToScreen(0, 0);
       worldView.position.set(origin.x, origin.y);
       worldView.scale.set(camera.pixelsPerBlock);
 
+      if (target) {
+        highlight.visible = true;
+        highlight.position.set(target.bx, target.by);
+        highlight.tint = target.inReach ? 0x33ff33 : 0xff5555;
+      } else {
+        highlight.visible = false;
+      }
+
+      const sel = palette[selected];
       hud.text =
-        `Minecraft 2D — M2: walk / jump / gravity / collision\n` +
-        `pos (${player.x.toFixed(2)}, ${player.y.toFixed(2)})  vel (${player.vx.toFixed(
-          1,
-        )}, ${player.vy.toFixed(1)})\n` +
-        `grounded: ${player.grounded}   @${TICK_RATE}Hz\n` +
-        `A/D or ←/→ to move, W/Space/↑ to jump` +
-        (atlas.missing.length > 0
-          ? `\nmissing textures: ${atlas.missing.length} (see console)`
-          : '');
+        `Minecraft 2D — M3: break / place (reach ${REACH})\n` +
+        `left-click break · right-click place · 1-9 or wheel to select\n` +
+        `selected: ${sel ? `${selected + 1}. ${sel.key}` : '—'}\n` +
+        `pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)})  grounded: ${player.grounded}  @${TICK_RATE}Hz`;
     },
   });
 
   if (import.meta.env.DEV) {
-    (window as unknown as { __player: Player }).__player = player;
+    (window as unknown as { __game: unknown }).__game = { player, world, registry, camera };
   }
 
   loop.start();
 }
 
-/** Placeholder look: head/torso/legs rectangles, drawn in block units at the
- * feet-center origin (so it stands on (0,0)). */
+/** Placeholder look: head/torso/legs rectangles in block units at feet-center. */
 function createPlayerSprite(): Graphics {
   const w = Player.WIDTH;
   const h = Player.HEIGHT;

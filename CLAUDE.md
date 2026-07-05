@@ -95,12 +95,12 @@ public/
   textures/blocks/     PNG block-textures (zie hieronder). Vite kopieert public/ 1:1.
 src/
   core/                constants, game-loop (fixed timestep), tijd
-  world/               chunk (Uint16Array-opslag); test-chunk (tijdelijk t/m M4)
+  world/               chunk (Uint16Array), world, interaction; test-chunk (tijd.)
   blocks/              block-register + block-definities (data-driven)
   render/              Pixi-app, texture-atlas, camera, chunk-view
-  entity/              speler (physics vanaf M2)
+  entity/              speler + physics
   gen/                 terreingeneratie, noise        (vanaf M4)
-  input/               toetsenbord/muis               (vanaf M2/M3)
+  input/               keyboard (beweging) + mouse (breken/plaatsen)
   storage/             IndexedDB save/load            (vanaf M7)
   ui/                  hotbar, inventory              (vanaf M6)
   main.ts              entry point / bootstrapping
@@ -155,7 +155,9 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
   (Block-register, chunk-opslag, texture-atlas + placeholders, camera.)
 - **M2** ✅ Speler-physics: lopen, springen, zwaartekracht, AABB-collision vs
   solids (axis-separated, sub-stepped tegen tunneling), render-interpolatie.
-- **M3** — Block breken/plaatsen met de muis (met reach-limiet).
+- **M3** ✅ Block breken (links) / plaatsen (rechts) met de muis, reach-limiet,
+  target-highlight, live per-cel chunk-view-update. Tijdelijke block-selectie
+  (1-9 / muiswiel) tot de echte hotbar in M6.
 - **M4** — Procedurele terreingeneratie met noise (oppervlak, aarde, steen,
   grotten ruwweg). Seeded en deterministisch.
 - **M5** — Oneindige wereld: chunks vloeiend laden/unloaden rond de speler.
@@ -167,8 +169,8 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 
 ### Huidige milestone
 
-**M2 — speler-physics: KLAAR.** Volgende: M3 (block breken/plaatsen met muis +
-reach-limiet).
+**M3 — block breken/plaatsen: KLAAR.** Volgende: M4 (procedurele
+terreingeneratie met seeded noise).
 
 Let op (tijdelijk):
 
@@ -176,6 +178,8 @@ Let op (tijdelijk):
   echte seeded noise-generatie.
 - `src/main.ts` rendert een vast venster van chunks (`RENDER_RANGE`) → in M5
   vervangen door streaming rond de speler.
+- Block-selectie via cijfertoetsen/wiel (`PALETTE` in `main.ts`) is tijdelijk →
+  echte hotbar/inventory in M6.
 - Full-block-hoogteverschillen blokkeren horizontaal lopen (geen auto-step voor
   hele blokken — net als Minecraft; eroverheen = springen).
 
