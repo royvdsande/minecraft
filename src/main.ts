@@ -12,28 +12,14 @@ import { stepPhysics } from './entity/physics';
 import { Keyboard } from './input/keyboard';
 import { Mouse } from './input/mouse';
 import { GameLoop } from './core/loop';
-import { TICK_RATE } from './core/constants';
+import { TICK_RATE, WORLD_HEIGHT } from './core/constants';
+import { Inventory } from './ui/inventory';
+import { HotbarView } from './ui/hotbar-view';
 
 /** Minimum chunks kept on each side of the player, even in narrow windows. */
 const MIN_STREAM_RADIUS = 4;
 /** Extra chunks beyond the visible viewport to preload before the camera reaches them. */
 const STREAM_MARGIN_CHUNKS = 2;
-
-/**
- * TEMPORARY block palette (until the real hotbar/inventory in M6). Pick with
- * number keys 1-9 or the mouse wheel; right-click places the selection.
- */
-const PALETTE = [
-  'grass_block',
-  'dirt',
-  'stone',
-  'cobblestone',
-  'sand',
-  'gravel',
-  'oak_log',
-  'oak_planks',
-  'oak_leaves',
-];
 
 /**
  * M3: break blocks (left-click) and place the selected block (right-click),
@@ -49,7 +35,7 @@ async function main(): Promise<void> {
   const seed = (Math.random() * 0x100000000) >>> 0;
   const generator = new TerrainGenerator(seed, registry);
   const world = new World(registry, generator);
-  const palette = PALETTE.map((key) => ({ key, id: registry.idOf(key) }));
+  const inventory = new Inventory();
 
   const camera = new Camera(32);
 
@@ -64,10 +50,11 @@ async function main(): Promise<void> {
   player.x = spawnX + 0.5;
   player.y = generator.surfaceHeight(spawnX); // feet on the surface block
   player.savePrev();
+  const initialViewport = viewportSize(app.canvas);
   chunkStreamer.syncAround(
     player.x,
     streamRadiusForViewport(
-      app.screen.width,
+      initialViewport.width,
       camera.pixelsPerBlock,
       MIN_STREAM_RADIUS,
       STREAM_MARGIN_CHUNKS,
@@ -88,11 +75,9 @@ async function main(): Promise<void> {
   const keyboard = new Keyboard();
   const mouse = new Mouse(app.canvas);
 
-  // Temporary block selection (until M6): number keys pick a palette slot.
-  let selected = 0;
   window.addEventListener('keydown', (e) => {
     const m = /^Digit([1-9])$/.exec(e.code);
-    if (m && Number(m[1]) <= palette.length) selected = Number(m[1]) - 1;
+    if (m) inventory.select(Number(m[1]) - 1);
   });
 
   const hud = new Text({
@@ -101,6 +86,9 @@ async function main(): Promise<void> {
   });
   hud.position.set(8, 8);
   app.stage.addChild(hud);
+
+  const hotbarView = new HotbarView(inventory, registry, atlas);
+  app.stage.addChild(hotbarView.container);
 
   const isSolid = (bx: number, by: number): boolean => world.isSolid(bx, by);
 
@@ -127,7 +115,7 @@ async function main(): Promise<void> {
       chunkStreamer.syncAround(
         player.x,
         streamRadiusForViewport(
-          app.screen.width,
+          viewportSize(app.canvas).width,
           camera.pixelsPerBlock,
           MIN_STREAM_RADIUS,
           STREAM_MARGIN_CHUNKS,
@@ -137,7 +125,7 @@ async function main(): Promise<void> {
       // Cycle selection with the wheel.
       const wheel = mouse.takeWheelSteps();
       if (wheel !== 0) {
-        selected = (((selected + wheel) % palette.length) + palette.length) % palette.length;
+        inventory.cycleSelected(wheel);
       }
 
       // Resolve the targeted cell and handle break/place.
@@ -150,20 +138,32 @@ async function main(): Promise<void> {
         const originX = player.x;
         const originY = player.y - Player.HEIGHT / 2; // reach from body center
         const inReach = withinReach(originX, originY, bx, by);
+        const insideWorld = by >= 0 && by < WORLD_HEIGHT;
         target = { bx, by, inReach };
 
-        if (inReach && leftClick && canBreak(registry.byId(world.getBlock(bx, by)))) {
+        const targetBlock = world.getBlock(bx, by);
+        const targetDef = registry.byId(targetBlock);
+        const dropId = targetDef.drops === null ? null : registry.idOf(targetDef.drops);
+        if (
+          insideWorld &&
+          inReach &&
+          leftClick &&
+          canBreak(targetDef) &&
+          (dropId === null || inventory.canAdd(dropId))
+        ) {
           world.setBlock(bx, by, AIR);
           chunkStreamer.updateBlock(bx, by);
+          if (dropId !== null) inventory.add(dropId);
         }
-        if (inReach && rightClick) {
-          const sel = palette[selected];
+
+        const selectedSlot = inventory.selectedSlot;
+        if (insideWorld && inReach && rightClick && selectedSlot) {
           const targetIsAir = world.getBlock(bx, by) === AIR;
+          const selectedDef = registry.byId(selectedSlot.blockId);
           if (
-            sel &&
             canPlace(
               targetIsAir,
-              registry.byId(sel.id).solid,
+              selectedDef.solid,
               bx,
               by,
               player.x,
@@ -172,8 +172,11 @@ async function main(): Promise<void> {
               Player.HEIGHT,
             )
           ) {
-            world.setBlock(bx, by, sel.id);
-            chunkStreamer.updateBlock(bx, by);
+            const blockId = inventory.consumeSelected();
+            if (blockId !== null) {
+              world.setBlock(bx, by, blockId);
+              chunkStreamer.updateBlock(bx, by);
+            }
           }
         }
       } else {
@@ -185,14 +188,18 @@ async function main(): Promise<void> {
       const ry = player.prevY + (player.y - player.prevY) * alpha;
       playerSprite.position.set(rx, ry);
 
-      camera.viewportWidth = app.screen.width;
-      camera.viewportHeight = app.screen.height;
+      const viewport = viewportSize(app.canvas);
+      camera.viewportWidth = viewport.width;
+      camera.viewportHeight = viewport.height;
       camera.x = rx;
       camera.y = ry - Player.HEIGHT / 2;
 
       const origin = camera.worldToScreen(0, 0);
       worldView.position.set(origin.x, origin.y);
       worldView.scale.set(camera.pixelsPerBlock);
+
+      hotbarView.layout(viewport.width, viewport.height);
+      hotbarView.update();
 
       if (target) {
         highlight.visible = true;
@@ -202,11 +209,10 @@ async function main(): Promise<void> {
         highlight.visible = false;
       }
 
-      const sel = palette[selected];
       hud.text =
-        `Minecraft 2D — M5: infinite world (seed ${seed})\n` +
-        `left-click break · right-click place · 1-9 or wheel to select\n` +
-        `selected: ${sel ? `${selected + 1}. ${sel.key}` : '—'}\n` +
+        `Minecraft 2D — M6: inventory + hotbar (seed ${seed})\n` +
+        `selected: ${selectedLabel(inventory, registry)}\n` +
+        `slots: ${filledSlots(inventory)}/${inventory.size}  items: ${totalItems(inventory)}\n` +
         `pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)})  chunk ${chunkStreamer.renderedChunkXs().join(',')}  grounded: ${player.grounded}  @${TICK_RATE}Hz`;
     },
   });
@@ -219,6 +225,7 @@ async function main(): Promise<void> {
       camera,
       generator,
       chunkStreamer,
+      inventory,
     };
   }
 
@@ -242,6 +249,31 @@ function createPlayerSprite(): Graphics {
   g.rect(-w / 2, -h * 0.72, w, h * 0.4).fill('#1fa4a0'); // torso
   g.rect(-w / 2, -h * 0.32, w, h * 0.32).fill('#3d3a8f'); // legs
   return g;
+}
+
+function viewportSize(canvas: HTMLCanvasElement): { width: number; height: number } {
+  return {
+    width: canvas.clientWidth || window.innerWidth,
+    height: canvas.clientHeight || window.innerHeight,
+  };
+}
+
+function selectedLabel(
+  inventory: Inventory,
+  registry: ReturnType<typeof createBlockRegistry>,
+): string {
+  const slot = inventory.selectedSlot;
+  if (!slot) return `${inventory.selectedIndex + 1}. empty`;
+  const def = registry.byId(slot.blockId);
+  return `${inventory.selectedIndex + 1}. ${def.key} x${slot.count}`;
+}
+
+function filledSlots(inventory: Inventory): number {
+  return inventory.snapshot().filter((slot) => slot !== null).length;
+}
+
+function totalItems(inventory: Inventory): number {
+  return inventory.snapshot().reduce((total, slot) => total + (slot?.count ?? 0), 0);
 }
 
 void main();

@@ -53,4 +53,11 @@ describe('BlockRegistry', () => {
     expect(reg.byId(reg.idOf('bedrock')).drops).toBeNull();
     expect(reg.byId(reg.idOf('bedrock')).hardness).toBe(-1);
   });
+
+  it('only references registered block keys as drops', () => {
+    const reg = createBlockRegistry();
+    for (const def of reg.all) {
+      if (def.drops !== null) expect(reg.has(def.drops)).toBe(true);
+    }
+  });
 });

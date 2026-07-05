@@ -162,7 +162,7 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
   aarde/zand, steen, grotten, ertsen, biomes (gras/woestijn/strand), water onder
   zeeniveau, bomen (chunk-grens-consistent). Deterministisch per seed+chunkX.
 - **M5** ✅ Oneindige wereld: chunks vloeiend laden/unloaden rond de speler.
-- **M6** — Inventory + hotbar: opgepakte blocks, selectie, stacking.
+- **M6** ✅ Inventory + hotbar: opgepakte blocks, selectie, stacking.
 - **M7** — Save/load via IndexedDB.
 - **M8** — Basis survival-loop: health, honger, fall damage, dag/nacht-cyclus.
 
@@ -170,8 +170,8 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 
 ### Huidige milestone
 
-**M5 — oneindige wereld / chunk-streaming: KLAAR.** Volgende: M6
-(inventory + hotbar; tijdelijke palette vervangen door echte item-stacks).
+**M6 — inventory + hotbar: KLAAR.** Volgende: M7 (save/load via IndexedDB;
+chunks incl. edits en per-wereld seed serialiseren).
 
 Seed: random bij opstart, getoond in de HUD (per-wereld-seed komt bij save/load
 in M7). Generatie-tuning staat als constanten boven in `src/gen/terrain.ts`
@@ -182,13 +182,19 @@ viewportbreedte plus preload-marge. `World` houdt gegenereerde chunk-data in
 geheugen, zodat break/place-edits behouden blijven wanneer een `ChunkView`
 unloadt en later opnieuw wordt aangemaakt. Echte persistentie blijft M7.
 
+Inventory is pure logica in `src/ui/inventory.ts`: 9 hotbar-slots, stack-size 64,
+selectie via slot-index/wiel, en break/place gebruikt block-register `drops`.
+Breken voegt drops direct toe aan de inventory als er stackruimte is; plaatsen
+verbruikt één item uit de geselecteerde stack. De oude tijdelijke `PALETTE` in
+`src/main.ts` is vervangen.
+
 Let op (tijdelijk):
 
-- Block-selectie via cijfertoetsen/wiel (`PALETTE` in `main.ts`) is tijdelijk →
-  echte hotbar/inventory in M6.
 - Chunk-generatie gebeurt nog synchroon op het moment dat een nieuwe randchunk
   nodig is. De preload-marge voorkomt zichtbare gaten; als terrain zwaarder
   wordt, kan generatie later over ticks worden uitgesmeerd.
+- Inventory is alleen sessie-geheugen tot M7 save/load. Er zijn nog geen losse
+  item-entities op de grond; drops worden direct opgepakt als er ruimte is.
 - Water is statisch (non-solid blok onder zeeniveau); stroming/zwemmen komt
   later. Grotten hebben nog geen donkere achtergrondlaag, dus door lucht in
   grotten/oceanen schemert de lucht-kleur (cosmetische polish voor later).
