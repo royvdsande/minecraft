@@ -95,11 +95,11 @@ public/
   textures/blocks/     PNG block-textures (zie hieronder). Vite kopieert public/ 1:1.
 src/
   core/                constants, game-loop (fixed timestep), tijd
-  world/               chunk (Uint16Array), world, interaction; test-chunk (tijd.)
+  world/               chunk (Uint16Array), world, interaction
   blocks/              block-register + block-definities (data-driven)
   render/              Pixi-app, texture-atlas, camera, chunk-view
   entity/              speler + physics
-  gen/                 terreingeneratie, noise        (vanaf M4)
+  gen/                 prng/hash, value-noise/fbm, terreingenerator
   input/               keyboard (beweging) + mouse (breken/plaatsen)
   storage/             IndexedDB save/load            (vanaf M7)
   ui/                  hotbar, inventory              (vanaf M6)
@@ -158,8 +158,9 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 - **M3** ✅ Block breken (links) / plaatsen (rechts) met de muis, reach-limiet,
   target-highlight, live per-cel chunk-view-update. Tijdelijke block-selectie
   (1-9 / muiswiel) tot de echte hotbar in M6.
-- **M4** — Procedurele terreingeneratie met noise (oppervlak, aarde, steen,
-  grotten ruwweg). Seeded en deterministisch.
+- **M4** ✅ Procedurele terreingeneratie met seeded value-noise/fbm: oppervlak,
+  aarde/zand, steen, grotten, ertsen, biomes (gras/woestijn/strand), water onder
+  zeeniveau, bomen (chunk-grens-consistent). Deterministisch per seed+chunkX.
 - **M5** — Oneindige wereld: chunks vloeiend laden/unloaden rond de speler.
 - **M6** — Inventory + hotbar: opgepakte blocks, selectie, stacking.
 - **M7** — Save/load via IndexedDB.
@@ -169,17 +170,22 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 
 ### Huidige milestone
 
-**M3 — block breken/plaatsen: KLAAR.** Volgende: M4 (procedurele
-terreingeneratie met seeded noise).
+**M4 — procedurele terreingeneratie: KLAAR.** Volgende: M5 (chunks streamen
+rond de speler; oneindige wereld).
+
+Seed: random bij opstart, getoond in de HUD (per-wereld-seed komt bij save/load
+in M7). Generatie-tuning staat als constanten boven in `src/gen/terrain.ts`
+(`SEA_LEVEL`, `BASE_SURFACE`, `AMPLITUDE`, freq's, cave-threshold, tree-chance).
 
 Let op (tijdelijk):
 
-- `src/world/test-chunk.ts` is hand-rolled M1-terrein → in M4 vervangen door
-  echte seeded noise-generatie.
 - `src/main.ts` rendert een vast venster van chunks (`RENDER_RANGE`) → in M5
   vervangen door streaming rond de speler.
 - Block-selectie via cijfertoetsen/wiel (`PALETTE` in `main.ts`) is tijdelijk →
   echte hotbar/inventory in M6.
+- Water is statisch (non-solid blok onder zeeniveau); stroming/zwemmen komt
+  later. Grotten hebben nog geen donkere achtergrondlaag, dus door lucht in
+  grotten/oceanen schemert de lucht-kleur (cosmetische polish voor later).
 - Full-block-hoogteverschillen blokkeren horizontaal lopen (geen auto-step voor
   hele blokken — net als Minecraft; eroverheen = springen).
 

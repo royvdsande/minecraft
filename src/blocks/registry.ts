@@ -146,6 +146,16 @@ const DEFAULT_BLOCKS: readonly BlockDef[] = [
     hardness: 3,
     drops: 'iron_ore',
   },
+  // Non-solid: entities pass through (swim/buoyancy physics come later).
+  // Unbreakable by hand (hardness < 0); a bucket handles it in a later scope.
+  {
+    key: 'water',
+    name: 'Water',
+    solid: false,
+    textureKey: 'water_still',
+    hardness: -1,
+    drops: null,
+  },
 ];
 
 /** Build a registry with the default block set registered. */

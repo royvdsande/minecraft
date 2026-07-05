@@ -2,24 +2,27 @@ import { WORLD_HEIGHT, chunkXOf, localXOf } from '@/core/constants';
 import { AIR, type BlockRegistry } from '@/blocks/registry';
 import type { BlockId } from '@/blocks/block';
 import type { Chunk } from './chunk';
-import { createTestChunk } from './test-chunk';
+import type { TerrainGenerator } from '@/gen/terrain';
 
 /**
  * The block world: a collection of chunks addressable by world block
- * coordinates. For M2 chunks are generated lazily from the temporary test
- * terrain on first access; real generation and load/unload streaming arrive in
- * M4/M5. The interface (getBlock / isSolid / setBlock) stays the same.
+ * coordinates. Chunks are generated lazily on first access; load/unload
+ * streaming arrives in M5. The interface (getBlock / isSolid / setBlock) is
+ * stable.
  */
 export class World {
   private readonly chunks = new Map<number, Chunk>();
 
-  constructor(private readonly registry: BlockRegistry) {}
+  constructor(
+    private readonly registry: BlockRegistry,
+    private readonly generator: TerrainGenerator,
+  ) {}
 
   /** Get (generating if needed) the chunk covering horizontal index chunkX. */
   getChunk(chunkX: number): Chunk {
     let chunk = this.chunks.get(chunkX);
     if (!chunk) {
-      chunk = createTestChunk(chunkX, this.registry);
+      chunk = this.generator.generateChunk(chunkX);
       this.chunks.set(chunkX, chunk);
     }
     return chunk;

@@ -5,8 +5,8 @@ import { loadBlockAtlas } from './render/texture-atlas';
 import { ChunkView } from './render/chunk-view';
 import { createBlockRegistry, AIR } from './blocks/registry';
 import { World } from './world/world';
-import { surfaceHeightAt } from './world/test-chunk';
-import { canBreak, canPlace, withinReach, REACH } from './world/interaction';
+import { TerrainGenerator, SEA_LEVEL } from './gen/terrain';
+import { canBreak, canPlace, withinReach } from './world/interaction';
 import { Player } from './entity/player';
 import { stepPhysics } from './entity/physics';
 import { Keyboard } from './input/keyboard';
@@ -42,7 +42,11 @@ async function main(): Promise<void> {
   const app = await createApp();
   const registry = createBlockRegistry();
   const atlas = await loadBlockAtlas(registry.textureKeys());
-  const world = new World(registry);
+
+  // Fresh random world each load (until per-world seeds land with save/load).
+  const seed = (Math.random() * 0x100000000) >>> 0;
+  const generator = new TerrainGenerator(seed, registry);
+  const world = new World(registry, generator);
   const palette = PALETTE.map((key) => ({ key, id: registry.idOf(key) }));
 
   // Static render window (block units); the camera scales it to pixels.
@@ -55,8 +59,9 @@ async function main(): Promise<void> {
   }
 
   const player = new Player();
-  player.x = 8.5;
-  player.y = surfaceHeightAt(8);
+  const spawnX = findLandColumn(generator);
+  player.x = spawnX + 0.5;
+  player.y = generator.surfaceHeight(spawnX); // feet on the surface block
   player.savePrev();
   const playerSprite = createPlayerSprite();
   worldView.addChild(playerSprite);
@@ -184,7 +189,7 @@ async function main(): Promise<void> {
 
       const sel = palette[selected];
       hud.text =
-        `Minecraft 2D — M3: break / place (reach ${REACH})\n` +
+        `Minecraft 2D — M4: procedural world (seed ${seed})\n` +
         `left-click break · right-click place · 1-9 or wheel to select\n` +
         `selected: ${sel ? `${selected + 1}. ${sel.key}` : '—'}\n` +
         `pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)})  grounded: ${player.grounded}  @${TICK_RATE}Hz`;
@@ -192,10 +197,24 @@ async function main(): Promise<void> {
   });
 
   if (import.meta.env.DEV) {
-    (window as unknown as { __game: unknown }).__game = { player, world, registry, camera };
+    (window as unknown as { __game: unknown }).__game = {
+      player,
+      world,
+      registry,
+      camera,
+      generator,
+    };
   }
 
   loop.start();
+}
+
+/** Find a dry-land column near the origin to spawn on (avoid spawning in water). */
+function findLandColumn(generator: TerrainGenerator): number {
+  for (let bx = 0; bx < 256; bx++) {
+    if (generator.surfaceHeight(bx) < SEA_LEVEL - 1) return bx;
+  }
+  return 0;
 }
 
 /** Placeholder look: head/torso/legs rectangles in block units at feet-center. */
