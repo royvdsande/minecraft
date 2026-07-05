@@ -17,6 +17,14 @@ import { Inventory } from './ui/inventory';
 import { HotbarView } from './ui/hotbar-view';
 import { deserializeGame, serializeGame } from './storage/save-data';
 import { loadSavedGame, openSaveDatabase, saveGame } from './storage/indexed-db';
+import {
+  MAX_HEALTH,
+  MAX_HUNGER,
+  createSurvivalState,
+  dayPhaseLabel,
+  nightOverlayAlpha,
+  stepSurvival,
+} from './survival/survival';
 
 /** Minimum chunks kept on each side of the player, even in narrow windows. */
 const MIN_STREAM_RADIUS = 4;
@@ -55,6 +63,7 @@ async function main(): Promise<void> {
   const world = new World(registry, generator);
   for (const chunk of loadedGame?.chunks ?? []) world.setChunk(chunk);
   const inventory = new Inventory();
+  let survival = createSurvivalState();
 
   const camera = new Camera(32);
 
@@ -121,6 +130,9 @@ async function main(): Promise<void> {
 
   app.stage.addChild(worldView);
 
+  const nightOverlay = new Graphics();
+  app.stage.addChild(nightOverlay);
+
   const keyboard = new Keyboard();
   const mouse = new Mouse(app.canvas);
 
@@ -147,19 +159,23 @@ async function main(): Promise<void> {
   const loop = new GameLoop({
     update: (dt) => {
       player.savePrev();
-      const next = stepPhysics(
-        player,
-        Player.WIDTH,
-        Player.HEIGHT,
-        keyboard.moveInput,
-        dt,
-        isSolid,
-      );
+      const moveInput = survival.alive
+        ? keyboard.moveInput
+        : { left: false, right: false, jump: false };
+      const next = stepPhysics(player, Player.WIDTH, Player.HEIGHT, moveInput, dt, isSolid);
       player.x = next.x;
       player.y = next.y;
       player.vx = next.vx;
       player.vy = next.vy;
       player.grounded = next.grounded;
+
+      survival = stepSurvival(survival, {
+        dt,
+        y: player.y,
+        vy: player.vy,
+        grounded: player.grounded,
+        moving: Math.abs(player.vx) > 0.01 || moveInput.jump,
+      });
 
       const streamPlan = chunkStreamer.syncAround(
         player.x,
@@ -250,6 +266,11 @@ async function main(): Promise<void> {
       worldView.position.set(origin.x, origin.y);
       worldView.scale.set(camera.pixelsPerBlock);
 
+      const nightAlpha = nightOverlayAlpha(survival.dayTime);
+      nightOverlay.clear().rect(0, 0, viewport.width, viewport.height).fill(0x06111f);
+      nightOverlay.alpha = nightAlpha;
+      nightOverlay.visible = nightAlpha > 0.01;
+
       hotbarView.layout(viewport.width, viewport.height);
       hotbarView.update();
 
@@ -262,11 +283,12 @@ async function main(): Promise<void> {
       }
 
       hud.text =
-        `Minecraft 2D — M7: save/load (seed ${seed})\n` +
+        `Minecraft 2D — M8: survival loop (seed ${seed})\n` +
         `${saveStatus}\n` +
+        `health: ${formatStat(survival.health)}/${MAX_HEALTH}  hunger: ${formatStat(survival.hunger)}/${MAX_HUNGER}  time: ${dayPhaseLabel(survival.dayTime)}\n` +
         `selected: ${selectedLabel(inventory, registry)}\n` +
         `slots: ${filledSlots(inventory)}/${inventory.size}  items: ${totalItems(inventory)}\n` +
-        `pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)})  chunk ${chunkStreamer.renderedChunkXs().join(',')}  grounded: ${player.grounded}  @${TICK_RATE}Hz`;
+        `pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)})  chunk ${chunkStreamer.renderedChunkXs().join(',')}  grounded: ${player.grounded}  ${survival.alive ? 'alive' : 'dead'}  @${TICK_RATE}Hz`;
     },
   });
 
@@ -280,6 +302,7 @@ async function main(): Promise<void> {
       chunkStreamer,
       inventory,
       saveNow,
+      getSurvival: () => survival,
     };
   }
 
@@ -328,6 +351,10 @@ function filledSlots(inventory: Inventory): number {
 
 function totalItems(inventory: Inventory): number {
   return inventory.snapshot().reduce((total, slot) => total + (slot?.count ?? 0), 0);
+}
+
+function formatStat(value: number): string {
+  return value % 1 === 0 ? String(value) : value.toFixed(1);
 }
 
 void main();

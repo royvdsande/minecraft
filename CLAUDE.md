@@ -164,14 +164,14 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 - **M5** ✅ Oneindige wereld: chunks vloeiend laden/unloaden rond de speler.
 - **M6** ✅ Inventory + hotbar: opgepakte blocks, selectie, stacking.
 - **M7** ✅ Save/load via IndexedDB.
-- **M8** — Basis survival-loop: health, honger, fall damage, dag/nacht-cyclus.
+- **M8** ✅ Basis survival-loop: health, honger, fall damage, dag/nacht-cyclus.
 
 **Later (niet nu):** structures, crafting, mobs, water-fysica, redstone, enz.
 
 ### Huidige milestone
 
-**M7 — save/load via IndexedDB: KLAAR.** Volgende: M8 (basis survival-loop:
-health, honger, fall damage, dag/nacht-cyclus).
+**M8 — basis survival-loop: KLAAR.** STOP hier en overleg vóór latere features
+(structures, crafting, mobs, water-fysica, redstone, enz.).
 
 Seed: random bij opstart, getoond in de HUD (per-wereld-seed komt bij save/load
 in M7). Generatie-tuning staat als constanten boven in `src/gen/terrain.ts`
@@ -193,6 +193,11 @@ de wereld-seed plus alle cached chunks als `Uint16Array`-blockdata. Bij startup
 worden opgeslagen chunks vóór rendering teruggezet in `World`; block-edits en
 nieuw gestreamde chunks triggeren een debounced autosave.
 
+Survival-logica is pure code in `src/survival/survival.ts`: health (20), hunger
+(20), fall damage na veilige valafstand, starvation damage als hunger op is, en
+een vaste dag/nacht-cyclus met render-overlay. HUD toont health/hunger/tijd en
+de speler kan niet meer bewegen als health 0 bereikt.
+
 Let op (tijdelijk):
 
 - Chunk-generatie gebeurt nog synchroon op het moment dat een nieuwe randchunk
@@ -201,6 +206,9 @@ Let op (tijdelijk):
 - Inventory en spelerpositie zijn nog sessie-geheugen; M7 bewaart bewust seed +
   chunkdata/edits. Er zijn nog geen losse item-entities op de grond; drops
   worden direct opgepakt als er ruimte is.
+- Survival-state (health, hunger, dagtijd) wordt nog niet opgeslagen; M7 bewaart
+  alleen seed + chunks. Eten/cooking/regen-items komen pas met latere
+  crafting/food-systemen.
 - Water is statisch (non-solid blok onder zeeniveau); stroming/zwemmen komt
   later. Grotten hebben nog geen donkere achtergrondlaag, dus door lucht in
   grotten/oceanen schemert de lucht-kleur (cosmetische polish voor later).
