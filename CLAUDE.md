@@ -161,7 +161,7 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 - **M4** ✅ Procedurele terreingeneratie met seeded value-noise/fbm: oppervlak,
   aarde/zand, steen, grotten, ertsen, biomes (gras/woestijn/strand), water onder
   zeeniveau, bomen (chunk-grens-consistent). Deterministisch per seed+chunkX.
-- **M5** — Oneindige wereld: chunks vloeiend laden/unloaden rond de speler.
+- **M5** ✅ Oneindige wereld: chunks vloeiend laden/unloaden rond de speler.
 - **M6** — Inventory + hotbar: opgepakte blocks, selectie, stacking.
 - **M7** — Save/load via IndexedDB.
 - **M8** — Basis survival-loop: health, honger, fall damage, dag/nacht-cyclus.
@@ -170,19 +170,25 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 
 ### Huidige milestone
 
-**M4 — procedurele terreingeneratie: KLAAR.** Volgende: M5 (chunks streamen
-rond de speler; oneindige wereld).
+**M5 — oneindige wereld / chunk-streaming: KLAAR.** Volgende: M6
+(inventory + hotbar; tijdelijke palette vervangen door echte item-stacks).
 
 Seed: random bij opstart, getoond in de HUD (per-wereld-seed komt bij save/load
 in M7). Generatie-tuning staat als constanten boven in `src/gen/terrain.ts`
 (`SEA_LEVEL`, `BASE_SURFACE`, `AMPLITUDE`, freq's, cave-threshold, tree-chance).
 
+Chunk-views worden rond de speler gestreamd met een radius die meegroeit met de
+viewportbreedte plus preload-marge. `World` houdt gegenereerde chunk-data in
+geheugen, zodat break/place-edits behouden blijven wanneer een `ChunkView`
+unloadt en later opnieuw wordt aangemaakt. Echte persistentie blijft M7.
+
 Let op (tijdelijk):
 
-- `src/main.ts` rendert een vast venster van chunks (`RENDER_RANGE`) → in M5
-  vervangen door streaming rond de speler.
 - Block-selectie via cijfertoetsen/wiel (`PALETTE` in `main.ts`) is tijdelijk →
   echte hotbar/inventory in M6.
+- Chunk-generatie gebeurt nog synchroon op het moment dat een nieuwe randchunk
+  nodig is. De preload-marge voorkomt zichtbare gaten; als terrain zwaarder
+  wordt, kan generatie later over ticks worden uitgesmeerd.
 - Water is statisch (non-solid blok onder zeeniveau); stroming/zwemmen komt
   later. Grotten hebben nog geen donkere achtergrondlaag, dus door lucht in
   grotten/oceanen schemert de lucht-kleur (cosmetische polish voor later).

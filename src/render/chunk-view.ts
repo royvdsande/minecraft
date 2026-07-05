@@ -32,6 +32,12 @@ export class ChunkView {
     this.sync(localX, y);
   }
 
+  /** Release all Pixi objects owned by this view. */
+  destroy(): void {
+    this.sprites.clear();
+    this.container.destroy({ children: true });
+  }
+
   private sync(localX: number, y: number): void {
     const key = y * CHUNK_WIDTH + localX;
     const textureKey = this.registry.byId(this.chunk.get(localX, y)).textureKey;

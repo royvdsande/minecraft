@@ -2,7 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { createApp } from './render/app';
 import { Camera } from './render/camera';
 import { loadBlockAtlas } from './render/texture-atlas';
-import { ChunkView } from './render/chunk-view';
+import { ChunkStreamer, streamRadiusForViewport } from './render/chunk-streamer';
 import { createBlockRegistry, AIR } from './blocks/registry';
 import { World } from './world/world';
 import { TerrainGenerator, SEA_LEVEL } from './gen/terrain';
@@ -12,10 +12,12 @@ import { stepPhysics } from './entity/physics';
 import { Keyboard } from './input/keyboard';
 import { Mouse } from './input/mouse';
 import { GameLoop } from './core/loop';
-import { TICK_RATE, chunkXOf, localXOf } from './core/constants';
+import { TICK_RATE } from './core/constants';
 
-/** Chunks rendered around spawn for M2/M3. Dynamic streaming arrives in M5. */
-const RENDER_RANGE = 4;
+/** Minimum chunks kept on each side of the player, even in narrow windows. */
+const MIN_STREAM_RADIUS = 4;
+/** Extra chunks beyond the visible viewport to preload before the camera reaches them. */
+const STREAM_MARGIN_CHUNKS = 2;
 
 /**
  * TEMPORARY block palette (until the real hotbar/inventory in M6). Pick with
@@ -49,20 +51,29 @@ async function main(): Promise<void> {
   const world = new World(registry, generator);
   const palette = PALETTE.map((key) => ({ key, id: registry.idOf(key) }));
 
-  // Static render window (block units); the camera scales it to pixels.
+  const camera = new Camera(32);
+
+  // Rendered world (block units); the camera scales it to pixels.
   const worldView = new Container();
-  const views = new Map<number, ChunkView>();
-  for (let cx = -RENDER_RANGE; cx <= RENDER_RANGE; cx++) {
-    const view = new ChunkView(world.getChunk(cx), registry, atlas);
-    views.set(cx, view);
-    worldView.addChild(view.container);
-  }
+  const terrainView = new Container();
+  worldView.addChild(terrainView);
+  const chunkStreamer = new ChunkStreamer(terrainView, world, registry, atlas);
 
   const player = new Player();
   const spawnX = findLandColumn(generator);
   player.x = spawnX + 0.5;
   player.y = generator.surfaceHeight(spawnX); // feet on the surface block
   player.savePrev();
+  chunkStreamer.syncAround(
+    player.x,
+    streamRadiusForViewport(
+      app.screen.width,
+      camera.pixelsPerBlock,
+      MIN_STREAM_RADIUS,
+      STREAM_MARGIN_CHUNKS,
+    ),
+  );
+
   const playerSprite = createPlayerSprite();
   worldView.addChild(playerSprite);
 
@@ -74,7 +85,6 @@ async function main(): Promise<void> {
 
   app.stage.addChild(worldView);
 
-  const camera = new Camera(32);
   const keyboard = new Keyboard();
   const mouse = new Mouse(app.canvas);
 
@@ -93,11 +103,6 @@ async function main(): Promise<void> {
   app.stage.addChild(hud);
 
   const isSolid = (bx: number, by: number): boolean => world.isSolid(bx, by);
-
-  /** Push a changed cell to its on-screen chunk view (if rendered). */
-  const refresh = (bx: number, by: number): void => {
-    views.get(chunkXOf(bx))?.update(localXOf(bx), by);
-  };
 
   // Current mouse target, recomputed each tick for rendering the highlight.
   let target: { bx: number; by: number; inReach: boolean } | null = null;
@@ -119,6 +124,16 @@ async function main(): Promise<void> {
       player.vy = next.vy;
       player.grounded = next.grounded;
 
+      chunkStreamer.syncAround(
+        player.x,
+        streamRadiusForViewport(
+          app.screen.width,
+          camera.pixelsPerBlock,
+          MIN_STREAM_RADIUS,
+          STREAM_MARGIN_CHUNKS,
+        ),
+      );
+
       // Cycle selection with the wheel.
       const wheel = mouse.takeWheelSteps();
       if (wheel !== 0) {
@@ -139,7 +154,7 @@ async function main(): Promise<void> {
 
         if (inReach && leftClick && canBreak(registry.byId(world.getBlock(bx, by)))) {
           world.setBlock(bx, by, AIR);
-          refresh(bx, by);
+          chunkStreamer.updateBlock(bx, by);
         }
         if (inReach && rightClick) {
           const sel = palette[selected];
@@ -158,7 +173,7 @@ async function main(): Promise<void> {
             )
           ) {
             world.setBlock(bx, by, sel.id);
-            refresh(bx, by);
+            chunkStreamer.updateBlock(bx, by);
           }
         }
       } else {
@@ -189,10 +204,10 @@ async function main(): Promise<void> {
 
       const sel = palette[selected];
       hud.text =
-        `Minecraft 2D — M4: procedural world (seed ${seed})\n` +
+        `Minecraft 2D — M5: infinite world (seed ${seed})\n` +
         `left-click break · right-click place · 1-9 or wheel to select\n` +
         `selected: ${sel ? `${selected + 1}. ${sel.key}` : '—'}\n` +
-        `pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)})  grounded: ${player.grounded}  @${TICK_RATE}Hz`;
+        `pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)})  chunk ${chunkStreamer.renderedChunkXs().join(',')}  grounded: ${player.grounded}  @${TICK_RATE}Hz`;
     },
   });
 
@@ -203,6 +218,7 @@ async function main(): Promise<void> {
       registry,
       camera,
       generator,
+      chunkStreamer,
     };
   }
 
