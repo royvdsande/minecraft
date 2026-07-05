@@ -149,7 +149,8 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 - **M0 — Scaffold** ✅ toolchain, fixed-timestep loop, Pixi-canvas, CLAUDE.md.
 - **M1** ✅ Render één chunk met tiles + camera. Speler-sprite die stilstaat.
   (Block-register, chunk-opslag, texture-atlas + placeholders, camera.)
-- **M2** — Speler-physics: lopen, springen, zwaartekracht, collision vs solids.
+- **M2** ✅ Speler-physics: lopen, springen, zwaartekracht, AABB-collision vs
+  solids (axis-separated, sub-stepped tegen tunneling), render-interpolatie.
 - **M3** — Block breken/plaatsen met de muis (met reach-limiet).
 - **M4** — Procedurele terreingeneratie met noise (oppervlak, aarde, steen,
   grotten ruwweg). Seeded en deterministisch.
@@ -162,10 +163,17 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 
 ### Huidige milestone
 
-**M1 — één chunk + camera: KLAAR.** Volgende: M2 (speler-physics).
+**M2 — speler-physics: KLAAR.** Volgende: M3 (block breken/plaatsen met muis +
+reach-limiet).
 
-Let op (tijdelijk): `src/world/test-chunk.ts` is hand-rolled M1-terrein en wordt
-in M4 vervangen door echte seeded noise-generatie.
+Let op (tijdelijk):
+
+- `src/world/test-chunk.ts` is hand-rolled M1-terrein → in M4 vervangen door
+  echte seeded noise-generatie.
+- `src/main.ts` rendert een vast venster van chunks (`RENDER_RANGE`) → in M5
+  vervangen door streaming rond de speler.
+- Full-block-hoogteverschillen blokkeren horizontaal lopen (geen auto-step voor
+  hele blokken — net als Minecraft; eroverheen = springen).
 
 ---
 
