@@ -1,14 +1,18 @@
 # Block textures
 
-Drop **real 16×16 PNG** block textures here. The game builds a texture atlas
-from this folder at startup. Anything missing is replaced by an auto-generated
-placeholder (flat colour + label), and the missing names are logged to the
-console — so the game always runs, even with an empty folder.
+Drop **real PNG** block textures here. The game builds a texture atlas from this
+folder at startup. Anything missing is replaced by an auto-generated placeholder
+(flat colour + label), and the missing names are logged to the console — so the
+game always runs, even with an empty folder.
 
 ## Rules
 
-- **Format:** PNG, exactly **16×16** pixels, no mipmaps.
+- **Format:** PNG, **square** and all the **same size**. 16×16 is the classic
+  Minecraft resolution and the recommended default, but any uniform square size
+  (32×32, 48×48, …) works — the atlas adapts to keep pixels crisp.
 - **Naming:** lower_snake_case, following the Minecraft wiki texture names.
+  A space-named file (`grass block side.png`) is also accepted, but underscores
+  are the canonical convention.
 - **Location:** this exact folder — `public/textures/blocks/`.
 - Files here are served as static assets (Vite copies `public/` verbatim), so
   the runtime path is `/textures/blocks/<name>.png`.

@@ -113,12 +113,16 @@ aanmaken.
 
 ## Textures & texture-pipeline
 
-- Echte **16×16 PNG's** komen in `public/textures/blocks/`. Ik (de gebruiker)
-  vul deze map zelf. **Claude verzint of downloadt GEEN textures.**
+- Echte **PNG's** (vierkant, onderling gelijke maat; 16×16 aanbevolen, maar
+  32/48/… werkt ook) komen in `public/textures/blocks/`. Ik (de gebruiker) vul
+  deze map zelf. **Claude verzint of downloadt GEEN textures.**
 - Naamgeving volgt de Minecraft-wiki, lower_snake_case, side-view faces (bv.
-  `stone.png`, `grass_block_side.png`, `oak_log.png`). Volledige lijst +
-  regels: `public/textures/blocks/README.md`.
-- Bij startup worden alle PNG's in **één texture-atlas** gebundeld (performance).
+  `stone.png`, `grass_block_side.png`, `oak_log.png`). Spatie-namen
+  (`grass block side.png`) worden ook geaccepteerd; underscores zijn canoniek.
+  Volledige lijst + regels: `public/textures/blocks/README.md`.
+- Bij startup worden alle PNG's in **één texture-atlas** gebundeld (performance);
+  de atlas-celgrootte volgt de native texture-resolutie zodat pixels scherp
+  blijven (geen dubbele downscale).
 - **Ontbrekende texture ⇒ automatische placeholder** (effen kleur + label) zodat
   de game altijd draait; ontbrekende namen worden naar de console gelogd.
 - **Pixel-art blijft scherp:** nearest-neighbour scaling globaal aan
