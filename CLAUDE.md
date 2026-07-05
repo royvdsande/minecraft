@@ -163,15 +163,15 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
   zeeniveau, bomen (chunk-grens-consistent). Deterministisch per seed+chunkX.
 - **M5** ✅ Oneindige wereld: chunks vloeiend laden/unloaden rond de speler.
 - **M6** ✅ Inventory + hotbar: opgepakte blocks, selectie, stacking.
-- **M7** — Save/load via IndexedDB.
+- **M7** ✅ Save/load via IndexedDB.
 - **M8** — Basis survival-loop: health, honger, fall damage, dag/nacht-cyclus.
 
 **Later (niet nu):** structures, crafting, mobs, water-fysica, redstone, enz.
 
 ### Huidige milestone
 
-**M6 — inventory + hotbar: KLAAR.** Volgende: M7 (save/load via IndexedDB;
-chunks incl. edits en per-wereld seed serialiseren).
+**M7 — save/load via IndexedDB: KLAAR.** Volgende: M8 (basis survival-loop:
+health, honger, fall damage, dag/nacht-cyclus).
 
 Seed: random bij opstart, getoond in de HUD (per-wereld-seed komt bij save/load
 in M7). Generatie-tuning staat als constanten boven in `src/gen/terrain.ts`
@@ -188,13 +188,19 @@ Breken voegt drops direct toe aan de inventory als er stackruimte is; plaatsen
 verbruikt één item uit de geselecteerde stack. De oude tijdelijke `PALETTE` in
 `src/main.ts` is vervangen.
 
+Save/load gebruikt IndexedDB (`minecraft-2d` / `saves` / `default`) en bewaart
+de wereld-seed plus alle cached chunks als `Uint16Array`-blockdata. Bij startup
+worden opgeslagen chunks vóór rendering teruggezet in `World`; block-edits en
+nieuw gestreamde chunks triggeren een debounced autosave.
+
 Let op (tijdelijk):
 
 - Chunk-generatie gebeurt nog synchroon op het moment dat een nieuwe randchunk
   nodig is. De preload-marge voorkomt zichtbare gaten; als terrain zwaarder
   wordt, kan generatie later over ticks worden uitgesmeerd.
-- Inventory is alleen sessie-geheugen tot M7 save/load. Er zijn nog geen losse
-  item-entities op de grond; drops worden direct opgepakt als er ruimte is.
+- Inventory en spelerpositie zijn nog sessie-geheugen; M7 bewaart bewust seed +
+  chunkdata/edits. Er zijn nog geen losse item-entities op de grond; drops
+  worden direct opgepakt als er ruimte is.
 - Water is statisch (non-solid blok onder zeeniveau); stroming/zwemmen komt
   later. Grotten hebben nog geen donkere achtergrondlaag, dus door lucht in
   grotten/oceanen schemert de lucht-kleur (cosmetische polish voor later).

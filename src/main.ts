@@ -15,6 +15,8 @@ import { GameLoop } from './core/loop';
 import { TICK_RATE, WORLD_HEIGHT } from './core/constants';
 import { Inventory } from './ui/inventory';
 import { HotbarView } from './ui/hotbar-view';
+import { deserializeGame, serializeGame } from './storage/save-data';
+import { loadSavedGame, openSaveDatabase, saveGame } from './storage/indexed-db';
 
 /** Minimum chunks kept on each side of the player, even in narrow windows. */
 const MIN_STREAM_RADIUS = 4;
@@ -31,10 +33,27 @@ async function main(): Promise<void> {
   const registry = createBlockRegistry();
   const atlas = await loadBlockAtlas(registry.textureKeys());
 
-  // Fresh random world each load (until per-world seeds land with save/load).
-  const seed = (Math.random() * 0x100000000) >>> 0;
+  let saveDb: IDBDatabase | null = null;
+  let saveStatus = 'save: starting';
+  let loadedGame: ReturnType<typeof deserializeGame> | null = null;
+  try {
+    saveDb = await openSaveDatabase();
+    const saved = await loadSavedGame(saveDb);
+    if (saved) {
+      loadedGame = deserializeGame(saved);
+      saveStatus = `save: loaded ${loadedGame.chunks.length} chunks`;
+    } else {
+      saveStatus = 'save: new world';
+    }
+  } catch (err) {
+    saveStatus = 'save: unavailable';
+    console.warn('[save] IndexedDB load failed; continuing without persistence', err);
+  }
+
+  const seed = loadedGame?.seed ?? (Math.random() * 0x100000000) >>> 0;
   const generator = new TerrainGenerator(seed, registry);
   const world = new World(registry, generator);
+  for (const chunk of loadedGame?.chunks ?? []) world.setChunk(chunk);
   const inventory = new Inventory();
 
   const camera = new Camera(32);
@@ -60,6 +79,36 @@ async function main(): Promise<void> {
       STREAM_MARGIN_CHUNKS,
     ),
   );
+
+  let saveTimer: number | null = null;
+  const saveNow = async (): Promise<void> => {
+    if (!saveDb) return;
+    saveStatus = 'save: saving';
+    try {
+      await saveGame(saveDb, serializeGame(seed, world.cachedChunks()));
+      saveStatus = `save: saved ${world.cachedChunkXs().length} chunks`;
+    } catch (err) {
+      saveStatus = 'save: error';
+      console.warn('[save] IndexedDB save failed', err);
+    }
+  };
+  const queueSave = (): void => {
+    if (!saveDb) return;
+    saveStatus = 'save: queued';
+    if (saveTimer !== null) window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null;
+      void saveNow();
+    }, 500);
+  };
+  window.addEventListener('pagehide', () => {
+    if (saveTimer !== null) {
+      window.clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    void saveNow();
+  });
+  queueSave();
 
   const playerSprite = createPlayerSprite();
   worldView.addChild(playerSprite);
@@ -112,7 +161,7 @@ async function main(): Promise<void> {
       player.vy = next.vy;
       player.grounded = next.grounded;
 
-      chunkStreamer.syncAround(
+      const streamPlan = chunkStreamer.syncAround(
         player.x,
         streamRadiusForViewport(
           viewportSize(app.canvas).width,
@@ -121,6 +170,7 @@ async function main(): Promise<void> {
           STREAM_MARGIN_CHUNKS,
         ),
       );
+      if (streamPlan.toLoad.length > 0) queueSave();
 
       // Cycle selection with the wheel.
       const wheel = mouse.takeWheelSteps();
@@ -154,6 +204,7 @@ async function main(): Promise<void> {
           world.setBlock(bx, by, AIR);
           chunkStreamer.updateBlock(bx, by);
           if (dropId !== null) inventory.add(dropId);
+          queueSave();
         }
 
         const selectedSlot = inventory.selectedSlot;
@@ -176,6 +227,7 @@ async function main(): Promise<void> {
             if (blockId !== null) {
               world.setBlock(bx, by, blockId);
               chunkStreamer.updateBlock(bx, by);
+              queueSave();
             }
           }
         }
@@ -210,7 +262,8 @@ async function main(): Promise<void> {
       }
 
       hud.text =
-        `Minecraft 2D — M6: inventory + hotbar (seed ${seed})\n` +
+        `Minecraft 2D — M7: save/load (seed ${seed})\n` +
+        `${saveStatus}\n` +
         `selected: ${selectedLabel(inventory, registry)}\n` +
         `slots: ${filledSlots(inventory)}/${inventory.size}  items: ${totalItems(inventory)}\n` +
         `pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)})  chunk ${chunkStreamer.renderedChunkXs().join(',')}  grounded: ${player.grounded}  @${TICK_RATE}Hz`;
@@ -226,6 +279,7 @@ async function main(): Promise<void> {
       generator,
       chunkStreamer,
       inventory,
+      saveNow,
     };
   }
 

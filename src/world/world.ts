@@ -6,9 +6,8 @@ import type { TerrainGenerator } from '@/gen/terrain';
 
 /**
  * The block world: a collection of chunks addressable by world block
- * coordinates. Chunks are generated lazily on first access; load/unload
- * streaming arrives in M5. The interface (getBlock / isSolid / setBlock) is
- * stable.
+ * coordinates. Chunks are generated lazily on first access. Render streaming
+ * unloads views only; this cache is also the source for M7 save serialization.
  */
 export class World {
   private readonly chunks = new Map<number, Chunk>();
@@ -26,6 +25,20 @@ export class World {
       this.chunks.set(chunkX, chunk);
     }
     return chunk;
+  }
+
+  /** Insert a preloaded chunk, replacing generated data for that chunkX. */
+  setChunk(chunk: Chunk): void {
+    this.chunks.set(chunk.chunkX, chunk);
+  }
+
+  /** Cached/generated chunks sorted left-to-right, for deterministic saves. */
+  cachedChunks(): readonly Chunk[] {
+    return [...this.chunks.values()].sort((a, b) => a.chunkX - b.chunkX);
+  }
+
+  cachedChunkXs(): number[] {
+    return this.cachedChunks().map((chunk) => chunk.chunkX);
   }
 
   /** Block id at world coords. Above/below the world is air. */
