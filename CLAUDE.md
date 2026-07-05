@@ -1,0 +1,169 @@
+# CLAUDE.md — Minecraft 2D
+
+Projectgids voor Claude (en voor mij). Lees dit vóór elke wijziging. Houd dit
+bestand up-to-date: werk minimaal **de huidige milestone** bij na elke stap.
+
+2D side-view Minecraft-remake. Singleplayer, survival. Voor eigen gebruik.
+Denk _Paper Minecraft_ (Griffpatch), maar robuust en netjes geëngineerd.
+
+---
+
+## Stack (niet afwijken zonder overleg)
+
+- **Taal:** TypeScript, `strict` aan (plus `noUncheckedIndexedAccess`,
+  `exactOptionalPropertyTypes` e.d. — zie `tsconfig.json`).
+- **Bundler/dev-server:** Vite.
+- **Renderer:** PixiJS v8 (WebGL). Verder **geen** game-framework; het
+  wereldmodel is volledig custom.
+- **Tests:** Vitest (unit tests voor de pure logica).
+- **Kwaliteit:** ESLint (flat config, type-checked) + Prettier.
+- **Deploy:** schone statische Vite-productionbuild → `dist/`, 1-op-1 op Vercel
+  (`vercel.json` aanwezig). **Geen Node-only dependencies in de browserbundel.**
+
+### Commands
+
+| Doel                | Command              |
+| ------------------- | -------------------- |
+| Dev-server          | `npm run dev`        |
+| Productionbuild     | `npm run build`      |
+| Build previewen     | `npm run preview`    |
+| Tests (eenmalig)    | `npm test`           |
+| Tests (watch)       | `npm run test:watch` |
+| Typecheck           | `npm run typecheck`  |
+| Lint + format-check | `npm run lint`       |
+| Auto-fix + format   | `npm run lint:fix`   |
+
+`npm run build` draait eerst `tsc --noEmit` (typecheck) en faalt de build bij
+type-fouten. Na elke milestone moeten `npm run build` én `npm test` groen zijn.
+
+---
+
+## Architectuurregels (dit maakt of breekt "robuust")
+
+1. **Chunk-based wereld.** Elke chunk is `CHUNK_WIDTH (16) × WORLD_HEIGHT (256)`
+   blocks en slaat block-ID's op in één **`Uint16Array`** — nooit een array van
+   objecten. Chunks laden/unloaden rond de speler → effectief oneindige wereld.
+2. **Simulatie losgekoppeld van rendering.** Vaste timestep (60 Hz) voor
+   game-logica/physics; rendering apart met interpolatie (`alpha`).
+   **Game-snelheid hangt NOOIT van de framerate af.** Zie `src/core/loop.ts`.
+3. **Block-types data-driven.** Eén centraal register (`id -> { name, solid,
+textureKey, hardness, drops, ... }`). Nieuw block toevoegen = **data**, geen
+   nieuw code-pad.
+4. **Saves in IndexedDB.** Chunks serialiseren naar IndexedDB. **Geen backend.**
+
+Aanvullende principes:
+
+- **Pure logica is testbaar.** Noise-gen, chunk-manager, inventory en
+  block-register bevatten geen Pixi/DOM-afhankelijkheden zodat Vitest ze
+  headless kan draaien. Rendering blijft in `src/render/`.
+- **Geen magic numbers voor coördinaten.** Alles via `src/core/constants.ts`.
+- **Determinisme.** Terreingeneratie is seeded en reproduceerbaar: zelfde seed +
+  zelfde chunkcoördinaat ⇒ exact dezelfde blocks.
+
+---
+
+## Coördinatensysteem
+
+Bron van waarheid: `src/core/constants.ts`. Kort:
+
+- De wereld is **oneindig langs X**, **vaste hoogte langs Y** (`WORLD_HEIGHT =
+256`).
+- **Block-coördinaten `(bx, by)`** zijn gehele getallen.
+- **De Y-as wijst OMLAAG.** `by = 0` = bovenkant lucht, `by = 255` = onderkant
+  (bedrock). Zwaartekracht versnelt entities richting **+Y**. (Deze keuze houdt
+  block-coördinaten gelijk aan array-indices en aan schermruimte — geen
+  y-flips.)
+- **Entity-posities zijn floats in BLOCK-EENHEDEN** (1 eenheid = 1 block), nooit
+  in pixels. Pixels bestaan alleen bij het renderen (`worldToScreen` in de
+  camera, komt in M1).
+- **Chunk-index:** `chunkX = floor(bx / 16)` (`chunkXOf`). Lokale X binnen een
+  chunk: `localXOf(bx)` ∈ `[0,15]`.
+- **Opslag-index binnen een chunk:** `index = localY * CHUNK_WIDTH + localX`
+  (row-major, `localY = by`).
+
+---
+
+## Mapstructuur
+
+```
+public/
+  textures/blocks/     PNG block-textures (zie hieronder). Vite kopieert public/ 1:1.
+src/
+  core/                constants, game-loop (fixed timestep), tijd
+  world/               chunk, chunk-manager, world  (vanaf M1)
+  blocks/              block-register + block-definities (data-driven) (vanaf M1)
+  render/              Pixi-app, texture-atlas, camera, chunk-renderer
+  entity/              speler, physics                (vanaf M2)
+  gen/                 terreingeneratie, noise        (vanaf M4)
+  input/               toetsenbord/muis               (vanaf M2/M3)
+  storage/             IndexedDB save/load            (vanaf M7)
+  ui/                  hotbar, inventory              (vanaf M6)
+  main.ts              entry point / bootstrapping
+```
+
+Directories verschijnen wanneer hun milestone begint — niet vooraf leeg
+aanmaken.
+
+---
+
+## Textures & texture-pipeline
+
+- Echte **16×16 PNG's** komen in `public/textures/blocks/`. Ik (de gebruiker)
+  vul deze map zelf. **Claude verzint of downloadt GEEN textures.**
+- Naamgeving volgt de Minecraft-wiki, lower_snake_case, side-view faces (bv.
+  `stone.png`, `grass_block_side.png`, `oak_log.png`). Volledige lijst +
+  regels: `public/textures/blocks/README.md`.
+- Bij startup worden alle PNG's in **één texture-atlas** gebundeld (performance).
+- **Ontbrekende texture ⇒ automatische placeholder** (effen kleur + label) zodat
+  de game altijd draait; ontbrekende namen worden naar de console gelogd.
+- **Pixel-art blijft scherp:** nearest-neighbour scaling globaal aan
+  (`TextureStyle.defaultOptions.scaleMode = 'nearest'` in `src/render/app.ts`),
+  `roundPixels`, geen antialias, geen blur.
+
+---
+
+## Naamgevingsconventies
+
+- **Bestanden/mappen:** `kebab-case.ts` (bv. `chunk-manager.ts`).
+- **Klassen / types / interfaces:** `PascalCase`.
+- **Functies / variabelen:** `camelCase`.
+- **Constanten:** `SCREAMING_SNAKE_CASE`.
+- **Block string-keys & texture-keys:** `lower_snake_case`, Minecraft-wiki-namen
+  (`grass_block`, `oak_log`).
+- **Tests:** naast de code als `<naam>.test.ts`.
+- **Imports:** absoluut via alias `@/` (= `src/`) waar dat de leesbaarheid helpt.
+- **Type-only imports:** `import type { ... }` (ESLint dwingt dit af).
+
+---
+
+## Milestones (survival-basis, elk apart speelbaar)
+
+Werk milestone voor milestone. Na elke milestone: werkende build + kleine,
+reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
+
+- **M0 — Scaffold** ✅ toolchain, fixed-timestep loop, Pixi-canvas, CLAUDE.md.
+- **M1** — Render één chunk met tiles + camera. Speler-sprite die stilstaat.
+- **M2** — Speler-physics: lopen, springen, zwaartekracht, collision vs solids.
+- **M3** — Block breken/plaatsen met de muis (met reach-limiet).
+- **M4** — Procedurele terreingeneratie met noise (oppervlak, aarde, steen,
+  grotten ruwweg). Seeded en deterministisch.
+- **M5** — Oneindige wereld: chunks vloeiend laden/unloaden rond de speler.
+- **M6** — Inventory + hotbar: opgepakte blocks, selectie, stacking.
+- **M7** — Save/load via IndexedDB.
+- **M8** — Basis survival-loop: health, honger, fall damage, dag/nacht-cyclus.
+
+**Later (niet nu):** structures, crafting, mobs, water-fysica, redstone, enz.
+
+### Huidige milestone
+
+**M0 — Scaffold: KLAAR, wacht op review.** Volgende: M1 (na akkoord).
+
+---
+
+## Werkwijze
+
+- Kleine, reviewbare commits per milestone; duidelijke messages.
+- Unit tests voor pure logica (noise-gen, chunk-manager, inventory,
+  block-register).
+- Update de sectie **Huidige milestone** hierboven na elke stap.
+- Bij twijfel: leg een korte keuze voor i.p.v. groot te gokken.
