@@ -57,6 +57,7 @@ export class HotbarView {
         view.icon.visible = false;
       } else {
         view.icon.texture = this.atlas.texture(textureKey);
+        view.icon.setSize(ICON_SIZE, ICON_SIZE);
         view.icon.visible = true;
       }
       view.count.text = slot.count > 1 ? String(slot.count) : '';
