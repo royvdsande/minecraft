@@ -1,26 +1,22 @@
-import type { BlockId } from '@/blocks/block';
+import type { BlockId, ItemStack } from '@/blocks/block';
 
 export const HOTBAR_SIZE = 9;
 export const INVENTORY_COLUMNS = 9;
 export const MAIN_INVENTORY_ROWS = 3;
 export const MAIN_INVENTORY_SIZE = INVENTORY_COLUMNS * MAIN_INVENTORY_ROWS;
 export const PLAYER_INVENTORY_SIZE = HOTBAR_SIZE + MAIN_INVENTORY_SIZE;
-export const CRAFTING_GRID_SIZE = 4;
 export const MAX_STACK_SIZE = 64;
 
-export interface InventorySlot {
-  readonly blockId: BlockId;
-  readonly count: number;
-}
+/** @deprecated alias — inventory slots are plain item stacks. */
+export type InventorySlot = ItemStack;
 
 /**
- * Pure player inventory: 9 hotbar slots, 27 storage slots, stackable block
- * items, selected hotbar slot, and a separate 2x2 crafting grid. No Pixi/DOM
- * dependencies so gameplay rules stay unit-testable.
+ * Pure player inventory: 9 hotbar slots + 27 storage slots, stackable items
+ * and a selected hotbar slot. Crafting grids live in `ItemGrid` (item-grid.ts)
+ * because they are transient UI state, not part of the player.
  */
 export class Inventory {
-  private readonly slots: Array<InventorySlot | null>;
-  private readonly craftingSlots: Array<InventorySlot | null>;
+  private readonly slots: Array<ItemStack | null>;
   private selected = 0;
 
   constructor(
@@ -38,7 +34,6 @@ export class Inventory {
       throw new RangeError(`Hotbar size must be between 1 and inventory size: ${hotbarSlotCount}`);
     }
     this.slots = Array.from({ length: size }, () => null);
-    this.craftingSlots = Array.from({ length: CRAFTING_GRID_SIZE }, () => null);
   }
 
   get size(): number {
@@ -53,22 +48,18 @@ export class Inventory {
     return this.selected;
   }
 
-  get selectedSlot(): InventorySlot | null {
+  get selectedSlot(): ItemStack | null {
     return this.slot(this.selected);
   }
 
-  slot(index: number): InventorySlot | null {
+  slot(index: number): ItemStack | null {
     this.assertIndex(index);
     const slot = this.slots[index] ?? null;
     return slot ? { ...slot } : null;
   }
 
-  snapshot(): ReadonlyArray<InventorySlot | null> {
+  snapshot(): ReadonlyArray<ItemStack | null> {
     return this.slots.map((slot) => (slot ? { ...slot } : null));
-  }
-
-  craftingSnapshot(): ReadonlyArray<InventorySlot | null> {
-    return this.craftingSlots.map((slot) => (slot ? { ...slot } : null));
   }
 
   select(index: number): void {
@@ -83,14 +74,9 @@ export class Inventory {
     this.selected = wrapIndex(this.selected + delta, this.hotbarSlotCount);
   }
 
-  setSlot(index: number, slot: InventorySlot | null): void {
+  setSlot(index: number, slot: ItemStack | null): void {
     this.assertIndex(index);
     this.slots[index] = this.copyValidatedSlot(slot);
-  }
-
-  setCraftingSlot(index: number, slot: InventorySlot | null): void {
-    this.assertCraftingIndex(index);
-    this.craftingSlots[index] = this.copyValidatedSlot(slot);
   }
 
   canAdd(blockId: BlockId, count: number = 1): boolean {
@@ -132,23 +118,6 @@ export class Inventory {
     return slot.blockId;
   }
 
-  craftingSlot(index: number): InventorySlot | null {
-    this.assertCraftingIndex(index);
-    const slot = this.craftingSlots[index] ?? null;
-    return slot ? { ...slot } : null;
-  }
-
-  consumeCraftingSlot(index: number, count: number = 1): BlockId | null {
-    this.assertCraftingIndex(index);
-    this.assertCount(count);
-    const slot = this.craftingSlots[index];
-    if (!slot || slot.count < count) return null;
-
-    const remaining = slot.count - count;
-    this.craftingSlots[index] = remaining > 0 ? { blockId: slot.blockId, count: remaining } : null;
-    return slot.blockId;
-  }
-
   private capacityFor(blockId: BlockId): number {
     let capacity = 0;
     for (const slot of this.slots) {
@@ -173,13 +142,7 @@ export class Inventory {
     }
   }
 
-  private assertCraftingIndex(index: number): void {
-    if (!Number.isInteger(index) || index < 0 || index >= this.craftingSlots.length) {
-      throw new RangeError(`Crafting slot out of range: ${index}`);
-    }
-  }
-
-  private copyValidatedSlot(slot: InventorySlot | null): InventorySlot | null {
+  private copyValidatedSlot(slot: ItemStack | null): ItemStack | null {
     if (slot === null) return null;
     this.assertItem(slot.blockId, slot.count);
     if (slot.count > this.maxStackSize) {

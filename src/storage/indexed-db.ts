@@ -35,12 +35,8 @@ export function loadSavedGame(
     (store) => store.get(id) as IDBRequest<SaveRecord | undefined>,
   ).then((record) => {
     if (!record) return null;
-    return {
-      version: record.version,
-      seed: record.seed,
-      savedAt: record.savedAt,
-      chunks: record.chunks,
-    };
+    const { id: _id, ...game } = record;
+    return game;
   });
 }
 

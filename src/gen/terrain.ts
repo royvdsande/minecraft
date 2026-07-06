@@ -41,6 +41,8 @@ interface TerrainBlockIds {
   bedrock: BlockId;
   coal: BlockId;
   iron: BlockId;
+  gold: BlockId;
+  diamond: BlockId;
   water: BlockId;
   log: BlockId;
   leaves: BlockId;
@@ -67,6 +69,8 @@ export class TerrainGenerator {
       bedrock: id('bedrock'),
       coal: id('coal_ore'),
       iron: id('iron_ore'),
+      gold: id('gold_ore'),
+      diamond: id('diamond_ore'),
       water: id('water'),
       log: id('oak_log'),
       leaves: id('oak_leaves'),
@@ -158,8 +162,11 @@ export class TerrainGenerator {
   private stoneOrCave(bx: number, by: number): BlockId {
     if (this.isCave(bx, by)) return AIR;
 
+    // Ore bands get rarer and deeper (larger y = deeper; y points down).
     const o = hashToUnit(bx, by, this.oreSeed);
     if (o < 0.014) return this.ids.coal;
+    if (by > WORLD_HEIGHT - 40 && o >= 0.996) return this.ids.diamond;
+    if (by > SEA_LEVEL + 56 && o >= 0.993) return this.ids.gold;
     if (by > SEA_LEVEL + 24 && o > 0.99) return this.ids.iron;
     if (o > 0.985) return this.ids.gravel;
     return this.ids.stone;

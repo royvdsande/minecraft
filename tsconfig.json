@@ -23,10 +23,9 @@
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
 
-    /* Path aliases */
-    "baseUrl": ".",
+    /* Path aliases (relative to this file; baseUrl is deprecated) */
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src", "vite.config.ts"]

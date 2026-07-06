@@ -170,60 +170,74 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 
 ### Huidige milestone
 
-**Post-M8 gebruikersstap — sprint + inventory/crafting: KLAAR.** Na overleg is
-een kleine post-M8 stap toegevoegd: sprinten met Shift, inventory openen/sluiten
-met E/Esc, en een survival-inventory-overlay met 2x2 crafting. Stop opnieuw vóór
-grotere latere features (structures, mobs, water-fysica, redstone, enz.).
+**Post-M8 stap 2 — Minecraft-basisprincipes: KLAAR.** Grote gameplay-stap:
+hold-to-mine, item-drops, container-GUI's, crafting table, furnace, chest,
+nieuwe ores/items en save-format v2. Stop opnieuw vóór grotere latere features
+(structures, mobs, water-fysica, redstone, enz.).
 
-Seed: random bij opstart, getoond in de HUD (per-wereld-seed komt bij save/load
-in M7). Generatie-tuning staat als constanten boven in `src/gen/terrain.ts`
-(`SEA_LEVEL`, `BASE_SURFACE`, `AMPLITUDE`, freq's, cave-threshold, tree-chance).
+Kern van deze stap:
 
-Chunk-views worden rond de speler gestreamd met een radius die meegroeit met de
-viewportbreedte plus preload-marge. `World` houdt gegenereerde chunk-data in
-geheugen, zodat break/place-edits behouden blijven wanneer een `ChunkView`
-unloadt en later opnieuw wordt aangemaakt. Echte persistentie blijft M7.
+- **Hold-to-mine.** Linkermuisknop vasthouden mined het target-block met een
+  duur op basis van `hardness` (`src/world/mining.ts`) en crack-overlay
+  (`src/render/breaking-overlay.ts`). Geen instant-break meer.
+- **Item-drops.** Gebroken blokken en Q-drops worden fysieke item-entities
+  (`src/entity/item-drop.ts` + `src/render/item-drop-view.ts`): zwaartekracht,
+  landen op solids, pickup binnen straal na korte delay, despawn na 5 min.
+  Drops zijn bewust nog sessie-geheugen (niet in de save).
+- **Achtergrondlaag-gevoel.** Bomen (oak_log/oak_leaves) en functionele blokken
+  (crafting_table/furnace/chest) zijn `solid: false`: de speler loopt er vóór
+  langs i.p.v. ertegenaan te botsen; breken/plaatsen werkt gewoon.
+- **Container-GUI.** `src/ui/inventory-view.ts` is één generiek slot/cursor-
+  systeem voor vier schermen: inventory (2x2 craft), crafting table (3x3),
+  chest (27 slots) en furnace (input/fuel/output + vlam- en pijl-gauges).
+  Linksklik pakt/plaatst/merged/swapt, rechtsklik pakt de helft of plaatst één
+  item, shift-klik quick-movet (result-slot: craft alles), hover geeft
+  highlight + naam-tooltip. Sluiten (E/Esc) stort craft-grid + cursor terug in
+  de inventory; overloop wordt als drop gespawnd.
+- **Crafting.** Shapeless recipes, grid-size-agnostisch (`src/ui/crafting.ts`,
+  `createDefaultRecipes`): log→4 planks, 2 planks→4 sticks, 4 planks→crafting
+  table, 8 cobblestone→furnace, 8 planks→chest (8 ingrediënten passen alleen op
+  de 3x3-table). Rechtsklik op een geplaatste crafting table opent de 3x3.
+- **Block-entities.** Chest/furnace-state per positie in
+  `src/world/block-entities.ts` (`BlockEntityStore`). Plaatsen maakt de entity
+  aan; breken laat de inhoud als drops vallen. Furnace-smeltlogica is puur in
+  `src/world/furnace.ts` (10 s per item, fuel via `fuelSeconds` in het
+  block-register): iron_ore→iron_ingot, gold_ore→gold_ingot, sand→glass,
+  cobblestone→stone, oak_log→charcoal. Furnaces ticken door in de game-loop,
+  ook met dichte GUI.
+- **Nieuwe blocks/items** (append-only in `src/blocks/registry.ts`):
+  crafting_table, furnace, chest, gold_ore, diamond_ore, glass + de
+  inventory-only items (`item: true`, niet plaatsbaar) stick, coal, charcoal,
+  iron_ingot, gold_ingot, diamond. Coal ore dropt nu `coal`; diamond ore dropt
+  `diamond`. Terrain genereert gold (diep) en diamond (diepste ~40 lagen).
+- **Save v2** (`src/storage/save-data.ts`): naast seed+chunks nu ook
+  inventory, block-entities en speler (positie, health, hunger, dagtijd).
+  v1-saves laden nog met defaults. Autosave bij edits; brandende furnaces
+  triggeren elke ~5 s een save.
+- **Overig:** Q dropt één item uit het geselecteerde slot richting de muis;
+  R respawnt op de wereld-spawn na dood; HUD toont een controls-regel.
 
-Inventory is pure logica in `src/ui/inventory.ts`: 9 hotbar-slots + 27 storage
-slots, stack-size 64, selectie via slot-index/wiel, en break/place gebruikt
-block-register `drops`. Breken voegt drops direct toe aan de inventory als er
-stackruimte is; plaatsen verbruikt één item uit de geselecteerde hotbar-stack.
-`src/ui/inventory-view.ts` rendert de survival-inventory als Pixi-overlay met
-2x2 crafting-grid en result-slot. Crafting-recepten staan data-driven in
-`src/ui/crafting.ts`; de eerste recipe is `oak_log` → 4× `oak_planks`.
+Seed: random bij opstart (of uit de save), getoond in de HUD. Generatie-tuning
+staat als constanten boven in `src/gen/terrain.ts`.
 
-De gevraagde Minecraft-wiki GUI-textures zijn niet gedownload of in de repo
-gekopieerd. De overlay tekent een pixel-art GUI in dezelfde inventaris-indeling,
-zodat het project schoon blijft en later eventueel eigen/legale GUI-assets kan
-inladen.
-
-Save/load gebruikt IndexedDB (`minecraft-2d` / `saves` / `default`) en bewaart
-de wereld-seed plus alle cached chunks als `Uint16Array`-blockdata. Bij startup
-worden opgeslagen chunks vóór rendering teruggezet in `World`; block-edits en
-nieuw gestreamde chunks triggeren een debounced autosave.
-
-Survival-logica is pure code in `src/survival/survival.ts`: health (20), hunger
-(20), fall damage na veilige valafstand, starvation damage als hunger op is, en
-een vaste dag/nacht-cyclus met render-overlay. HUD toont health/hunger/tijd en
-de speler kan niet meer bewegen als health 0 bereikt.
+GUI- en block/item-textures worden NIET door Claude gedownload of gegenereerd
+(Mojang-assets zijn auteursrechtelijk beschermd; deze repo is publiek). De GUI
+is eigen pixel-art in Minecraft-indeling; ontbrekende block/item-PNG's krijgen
+automatisch placeholders. De benodigde nieuwe bestandsnamen staan in
+`public/textures/blocks/README.md` — de gebruiker vult die map zelf.
 
 Let op (tijdelijk):
 
 - Chunk-generatie gebeurt nog synchroon op het moment dat een nieuwe randchunk
-  nodig is. De preload-marge voorkomt zichtbare gaten; als terrain zwaarder
-  wordt, kan generatie later over ticks worden uitgesmeerd.
-- Inventory en spelerpositie zijn nog sessie-geheugen; M7 bewaart bewust seed +
-  chunkdata/edits. Crafting-grid-inhoud, cursor-stack en open/dicht-status
-  worden ook nog niet opgeslagen. Er zijn nog geen losse item-entities op de
-  grond; drops worden direct opgepakt als er ruimte is.
-- Survival-state (health, hunger, dagtijd) wordt nog niet opgeslagen; M7 bewaart
-  alleen seed + chunks. Eten/cooking/regen-items komen pas met latere
-  crafting/food-systemen.
+  nodig is. De preload-marge voorkomt zichtbare gaten.
+- Item-drops op de grond en de open/dicht-status van GUI's zitten niet in de
+  save. Eten/food-regen bestaat nog niet (hunger heelt nog niets).
 - Water is statisch (non-solid blok onder zeeniveau); stroming/zwemmen komt
-  later. Grotten hebben nog geen donkere achtergrondlaag, dus door lucht in
-  grotten/oceanen schemert de lucht-kleur (cosmetische polish voor later).
+  later. Grotten hebben nog geen donkere achtergrondlaag.
 - Full-block-hoogteverschillen blokkeren horizontaal lopen (geen auto-step voor
   hele blokken — net als Minecraft; eroverheen = springen).
+- Er zijn nog geen tools/durability; alles is met de hand te minen op
+  hardness-tijd.
 
 ---
 
