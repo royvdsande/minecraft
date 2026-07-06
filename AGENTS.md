@@ -171,11 +171,13 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 ### Huidige milestone
 
 **Post-M8 gebruikersstappen — survival polish: KLAAR.** Na overleg zijn kleine
-post-M8 stappen toegevoegd: sprinten met Shift, inventory openen/sluiten met
-E/Esc, een survival-inventory-overlay met 2x2 crafting, hold-to-mine met
-breaking/crack animatie, een skin-based Steve-model met losse lichaamsdelen en
-walking animation, en subtiele mouse-look camera/head aim. Stop opnieuw vóór
-grotere latere features (structures, mobs, water-fysica, redstone, enz.).
+post-M8 stappen toegevoegd: custom controls (W = rechts, S = links, Space =
+springen, Control of double-tap W/S = sprinten tot loslaten), inventory
+openen/sluiten met E/Esc, een survival-inventory-overlay met 2x2 crafting,
+hold-to-mine met breaking/crack animatie, een skin-based Steve-model met losse
+lichaamsdelen en walking animation, en subtiele mouse-look camera/head aim. Stop
+opnieuw vóór grotere latere features (structures, mobs, water-fysica, redstone,
+enz.).
 
 Seed: random bij opstart, getoond in de HUD (per-wereld-seed komt bij save/load
 in M7). Generatie-tuning staat als constanten boven in `src/gen/terrain.ts`

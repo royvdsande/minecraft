@@ -6,12 +6,7 @@ import type { MoveInput } from '@/entity/physics';
  * (physical key) so it is layout-independent.
  */
 export class Keyboard {
-  private readonly down = new Set<string>();
-
-  private static readonly LEFT = ['ArrowLeft', 'KeyA'];
-  private static readonly RIGHT = ['ArrowRight', 'KeyD'];
-  private static readonly JUMP = ['ArrowUp', 'KeyW', 'Space'];
-  private static readonly SPRINT = ['ShiftLeft', 'ShiftRight'];
+  private readonly state = new KeyboardState();
 
   constructor(private readonly target: Window = window) {
     this.target.addEventListener('keydown', this.onKeyDown);
@@ -19,39 +14,86 @@ export class Keyboard {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
-    // Stop Space/arrows from scrolling the page.
-    if (this.isBound(e.code)) e.preventDefault();
-    this.down.add(e.code);
+    // Stop Space from scrolling and prevent Ctrl+W from closing the tab while sprinting.
+    if (this.state.isBound(e.code)) e.preventDefault();
+    this.state.keyDown(e.code, e.timeStamp, e.repeat);
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
-    this.down.delete(e.code);
+    this.state.keyUp(e.code);
   };
 
-  private isBound(code: string): boolean {
-    return (
-      Keyboard.LEFT.includes(code) ||
-      Keyboard.RIGHT.includes(code) ||
-      Keyboard.JUMP.includes(code) ||
-      Keyboard.SPRINT.includes(code)
-    );
-  }
-
-  private any(codes: readonly string[]): boolean {
-    return codes.some((c) => this.down.has(c));
-  }
-
   get moveInput(): MoveInput {
-    return {
-      left: this.any(Keyboard.LEFT),
-      right: this.any(Keyboard.RIGHT),
-      jump: this.any(Keyboard.JUMP),
-      sprint: this.any(Keyboard.SPRINT),
-    };
+    return this.state.moveInput;
   }
 
   dispose(): void {
     this.target.removeEventListener('keydown', this.onKeyDown);
     this.target.removeEventListener('keyup', this.onKeyUp);
   }
+}
+
+export const DOUBLE_TAP_SPRINT_MS = 280;
+
+const LEFT = ['KeyS'] as const;
+const RIGHT = ['KeyW'] as const;
+const JUMP = ['Space'] as const;
+const SPRINT_HOLD = ['ControlLeft', 'ControlRight'] as const;
+const MOVEMENT = [...LEFT, ...RIGHT] as const;
+
+export class KeyboardState {
+  private readonly down = new Set<string>();
+  private readonly lastTapAt = new Map<string, number>();
+  private sprintLatchCode: string | null = null;
+
+  keyDown(code: string, timeMs: number, repeat: boolean = false): void {
+    const wasDown = this.down.has(code);
+    this.down.add(code);
+    if (repeat || wasDown || !isMovement(code)) return;
+
+    const previousTap = this.lastTapAt.get(code);
+    if (previousTap !== undefined && timeMs - previousTap <= DOUBLE_TAP_SPRINT_MS) {
+      this.sprintLatchCode = code;
+    }
+    this.lastTapAt.set(code, timeMs);
+  }
+
+  keyUp(code: string): void {
+    this.down.delete(code);
+    if (this.sprintLatchCode === code) this.sprintLatchCode = null;
+  }
+
+  isBound(code: string): boolean {
+    return (
+      includes(LEFT, code) ||
+      includes(RIGHT, code) ||
+      includes(JUMP, code) ||
+      includes(SPRINT_HOLD, code)
+    );
+  }
+
+  get moveInput(): MoveInput {
+    return {
+      left: this.any(LEFT),
+      right: this.any(RIGHT),
+      jump: this.any(JUMP),
+      sprint: this.any(SPRINT_HOLD) || this.latchedSprintIsHeld(),
+    };
+  }
+
+  private any(codes: readonly string[]): boolean {
+    return codes.some((c) => this.down.has(c));
+  }
+
+  private latchedSprintIsHeld(): boolean {
+    return this.sprintLatchCode !== null && this.down.has(this.sprintLatchCode);
+  }
+}
+
+function isMovement(code: string): boolean {
+  return includes(MOVEMENT, code);
+}
+
+function includes(codes: readonly string[], code: string): boolean {
+  return codes.includes(code);
 }
