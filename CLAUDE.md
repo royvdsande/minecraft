@@ -170,9 +170,11 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 
 ### Huidige milestone
 
-**Post-M8 gebruikersstap — sprint + inventory/crafting: KLAAR.** Na overleg is
-een kleine post-M8 stap toegevoegd: sprinten met Shift, inventory openen/sluiten
-met E/Esc, en een survival-inventory-overlay met 2x2 crafting. Stop opnieuw vóór
+**Post-M8 gebruikersstappen — survival polish: KLAAR.** Na overleg zijn kleine
+post-M8 stappen toegevoegd: sprinten met Shift, inventory openen/sluiten met
+E/Esc, een survival-inventory-overlay met 2x2 crafting, hold-to-mine met
+breaking/crack animatie, een skin-based Steve-model met losse lichaamsdelen en
+walking animation, en subtiele mouse-look camera/head aim. Stop opnieuw vóór
 grotere latere features (structures, mobs, water-fysica, redstone, enz.).
 
 Seed: random bij opstart, getoond in de HUD (per-wereld-seed komt bij save/load
@@ -192,10 +194,17 @@ stackruimte is; plaatsen verbruikt één item uit de geselecteerde hotbar-stack.
 2x2 crafting-grid en result-slot. Crafting-recepten staan data-driven in
 `src/ui/crafting.ts`; de eerste recipe is `oak_log` → 4× `oak_planks`.
 
-De gevraagde Minecraft-wiki GUI-textures zijn niet gedownload of in de repo
-gekopieerd. De overlay tekent een pixel-art GUI in dezelfde inventaris-indeling,
-zodat het project schoon blijft en later eventueel eigen/legale GUI-assets kan
-inladen.
+De meegegeven GUI- en skin-PNG's staan in `public/textures/ui/`.
+`src/ui/inventory-view.ts` en `src/ui/hotbar-view.ts` gebruiken de aangeleverde
+inventory/hotbar textures als achtergrond; items blijven daar als eigen sprites
+bovenop renderen. `src/render/player-view.ts` snijdt de 64x64 skin atlas op in
+hoofd, torso, armen en benen. De oudere Minecraft-wiki GUI-textures zijn niet
+gedownload of in de repo gekopieerd.
+
+Block breaking is nu hold-to-mine: `src/world/mining.ts` bouwt pure mining
+progress op volgens `BlockDef.hardness`, reset bij target-wissel/loslaten, en
+breekt pas bij 100%. `src/render/breaking-overlay.ts` tekent de oplopende crack
+animatie boven het target block.
 
 Save/load gebruikt IndexedDB (`minecraft-2d` / `saves` / `default`) en bewaart
 de wereld-seed plus alle cached chunks als `Uint16Array`-blockdata. Bij startup
@@ -216,6 +225,8 @@ Let op (tijdelijk):
   chunkdata/edits. Crafting-grid-inhoud, cursor-stack en open/dicht-status
   worden ook nog niet opgeslagen. Er zijn nog geen losse item-entities op de
   grond; drops worden direct opgepakt als er ruimte is.
+- Mining gebruikt block-hardness en geen tool-tier of enchantments. Tools en
+  durability komen pas met latere crafting/item-systemen.
 - Survival-state (health, hunger, dagtijd) wordt nog niet opgeslagen; M7 bewaart
   alleen seed + chunks. Eten/cooking/regen-items komen pas met latere
   crafting/food-systemen.

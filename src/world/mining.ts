@@ -27,10 +27,7 @@ export interface MiningStepResult {
 const MIN_BREAK_SECONDS = 0.25;
 const MAX_BREAK_SECONDS = 6;
 
-export function stepMining(
-  state: MiningState | null,
-  input: MiningStepInput,
-): MiningStepResult {
+export function stepMining(state: MiningState | null, input: MiningStepInput): MiningStepResult {
   if (!input.mining || !input.target || input.hardness < 0) {
     return { state: null, completed: false };
   }

@@ -3,10 +3,14 @@ import { createApp } from './render/app';
 import { Camera } from './render/camera';
 import { loadBlockAtlas } from './render/texture-atlas';
 import { ChunkStreamer, streamRadiusForViewport } from './render/chunk-streamer';
+import { drawBreakingOverlay } from './render/breaking-overlay';
+import { PlayerView } from './render/player-view';
+import { loadUiTextures } from './render/ui-assets';
 import { createBlockRegistry, AIR } from './blocks/registry';
 import { World } from './world/world';
 import { TerrainGenerator, SEA_LEVEL } from './gen/terrain';
 import { canBreak, canPlace, withinReach } from './world/interaction';
+import { stepMining, type MiningState } from './world/mining';
 import { Player } from './entity/player';
 import { stepPhysics } from './entity/physics';
 import { Keyboard } from './input/keyboard';
@@ -41,6 +45,7 @@ const STREAM_MARGIN_CHUNKS = 2;
 async function main(): Promise<void> {
   const app = await createApp();
   const registry = createBlockRegistry();
+  await loadUiTextures();
   const atlas = await loadBlockAtlas(registry.textureKeys());
 
   let saveDb: IDBDatabase | null = null;
@@ -122,8 +127,12 @@ async function main(): Promise<void> {
   });
   queueSave();
 
-  const playerSprite = createPlayerSprite();
-  worldView.addChild(playerSprite);
+  const breakingOverlay = new Graphics();
+  breakingOverlay.visible = false;
+  worldView.addChild(breakingOverlay);
+
+  const playerView = new PlayerView();
+  worldView.addChild(playerView.container);
 
   // Target-cell outline (drawn on top of everything in the world).
   const highlight = new Graphics();
@@ -172,6 +181,8 @@ async function main(): Promise<void> {
 
   // Current mouse target, recomputed each tick for rendering the highlight.
   let target: { bx: number; by: number; inReach: boolean } | null = null;
+  let mining: MiningState | null = null;
+  let walkPhase = 0;
 
   const loop = new GameLoop({
     update: (dt) => {
@@ -186,6 +197,9 @@ async function main(): Promise<void> {
       player.vx = next.vx;
       player.vy = next.vy;
       player.grounded = next.grounded;
+      if (player.grounded && Math.abs(player.vx) > 0.05) {
+        walkPhase += dt * Math.abs(player.vx) * 4.5;
+      }
 
       survival = stepSurvival(survival, {
         dt,
@@ -213,10 +227,10 @@ async function main(): Promise<void> {
       }
 
       // Resolve the targeted cell and handle break/place.
-      const leftClick = mouse.takeLeftClick();
       const rightClick = mouse.takeRightClick();
       if (inventoryView.isOpen) {
         target = null;
+        mining = null;
       } else if (mouse.hasPosition) {
         const wp = camera.screenToWorld(mouse.x, mouse.y);
         const bx = Math.floor(wp.x);
@@ -230,21 +244,29 @@ async function main(): Promise<void> {
         const targetBlock = world.getBlock(bx, by);
         const targetDef = registry.byId(targetBlock);
         const dropId = targetDef.drops === null ? null : registry.idOf(targetDef.drops);
-        if (
+        const canMineTarget =
           insideWorld &&
           inReach &&
-          leftClick &&
           canBreak(targetDef) &&
-          (dropId === null || inventory.canAdd(dropId))
-        ) {
+          (dropId === null || inventory.canAdd(dropId));
+        const miningStep = stepMining(mining, {
+          dt,
+          mining: mouse.leftDown,
+          target: canMineTarget ? { bx, by, blockId: targetBlock } : null,
+          hardness: targetDef.hardness,
+        });
+        mining = miningStep.state;
+
+        if (miningStep.completed) {
           world.setBlock(bx, by, AIR);
           chunkStreamer.updateBlock(bx, by);
           if (dropId !== null) inventory.add(dropId);
+          mining = null;
           queueSave();
         }
 
         const selectedSlot = inventory.selectedSlot;
-        if (insideWorld && inReach && rightClick && selectedSlot) {
+        if (!miningStep.completed && insideWorld && inReach && rightClick && selectedSlot) {
           const targetIsAir = world.getBlock(bx, by) === AIR;
           const selectedDef = registry.byId(selectedSlot.blockId);
           if (
@@ -263,28 +285,44 @@ async function main(): Promise<void> {
             if (blockId !== null) {
               world.setBlock(bx, by, blockId);
               chunkStreamer.updateBlock(bx, by);
+              mining = null;
               queueSave();
             }
           }
         }
       } else {
         target = null;
+        mining = null;
       }
     },
     render: (alpha) => {
       const rx = player.prevX + (player.x - player.prevX) * alpha;
       const ry = player.prevY + (player.y - player.prevY) * alpha;
-      playerSprite.position.set(rx, ry);
 
       const viewport = viewportSize(app.canvas);
       camera.viewportWidth = viewport.width;
       camera.viewportHeight = viewport.height;
-      camera.x = rx;
-      camera.y = ry - Player.HEIGHT / 2;
+      const lookOffset = cameraLookOffset(mouse, viewport, inventoryView.isOpen);
+      camera.x = rx + lookOffset.x;
+      camera.y = ry - Player.HEIGHT / 2 + lookOffset.y;
+      const aim = mouse.hasPosition
+        ? camera.screenToWorld(mouse.x, mouse.y)
+        : { x: rx + Math.sign(player.vx || 1) * 2, y: ry - Player.HEIGHT / 2 };
+      playerView.update({
+        x: rx,
+        y: ry,
+        vx: player.vx,
+        vy: player.vy,
+        grounded: player.grounded,
+        walkPhase,
+        aimX: aim.x,
+        aimY: aim.y,
+      });
 
       const origin = camera.worldToScreen(0, 0);
       worldView.position.set(origin.x, origin.y);
       worldView.scale.set(camera.pixelsPerBlock);
+      drawBreakingOverlay(breakingOverlay, mining);
 
       const nightAlpha = nightOverlayAlpha(survival.dayTime);
       nightOverlay.clear().rect(0, 0, viewport.width, viewport.height).fill(0x06111f);
@@ -306,7 +344,7 @@ async function main(): Promise<void> {
       }
 
       hud.text =
-        `Minecraft 2D — post-M8: sprint + inventory crafting (seed ${seed})\n` +
+        `Minecraft 2D — post-M8: mining + skin UI (seed ${seed})\n` +
         `${saveStatus}\n` +
         `health: ${formatStat(survival.health)}/${MAX_HEALTH}  hunger: ${formatStat(survival.hunger)}/${MAX_HUNGER}  time: ${dayPhaseLabel(survival.dayTime)}\n` +
         `selected: ${selectedLabel(inventory, registry)}\n` +
@@ -325,6 +363,7 @@ async function main(): Promise<void> {
       chunkStreamer,
       inventory,
       inventoryView,
+      playerView,
       saveNow,
       getSurvival: () => survival,
     };
@@ -350,22 +389,22 @@ function createCraftingRecipes(registry: ReturnType<typeof createBlockRegistry>)
   ];
 }
 
-/** Placeholder look: head/torso/legs rectangles in block units at feet-center. */
-function createPlayerSprite(): Graphics {
-  const w = Player.WIDTH;
-  const h = Player.HEIGHT;
-  const g = new Graphics();
-  g.rect(-w / 2, -h, w, h * 0.28).fill('#c98e6d'); // head
-  g.rect(-w / 2, -h * 0.72, w, h * 0.4).fill('#1fa4a0'); // torso
-  g.rect(-w / 2, -h * 0.32, w, h * 0.32).fill('#3d3a8f'); // legs
-  return g;
-}
-
 function viewportSize(canvas: HTMLCanvasElement): { width: number; height: number } {
   return {
     width: canvas.clientWidth || window.innerWidth,
     height: canvas.clientHeight || window.innerHeight,
   };
+}
+
+function cameraLookOffset(
+  mouse: Mouse,
+  viewport: { width: number; height: number },
+  disabled: boolean,
+): { x: number; y: number } {
+  if (disabled || !mouse.hasPosition) return { x: 0, y: 0 };
+  const nx = clamp((mouse.x - viewport.width / 2) / (viewport.width / 2), -1, 1);
+  const ny = clamp((mouse.y - viewport.height / 2) / (viewport.height / 2), -1, 1);
+  return { x: nx * 1.25, y: ny * 0.75 };
 }
 
 function selectedLabel(
@@ -388,6 +427,10 @@ function totalItems(inventory: Inventory): number {
 
 function formatStat(value: number): string {
   return value % 1 === 0 ? String(value) : value.toFixed(1);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 void main();

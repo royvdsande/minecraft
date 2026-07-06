@@ -1,6 +1,7 @@
-import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
 import type { BlockRegistry } from '@/blocks/registry';
 import type { BlockAtlas } from '@/render/texture-atlas';
+import { UI_TEXTURES, uiTexture } from '@/render/ui-assets';
 import type { Inventory, InventorySlot } from './inventory';
 import {
   CRAFTING_GRID_SIZE,
@@ -16,18 +17,20 @@ import {
   type CraftingRecipe,
 } from './crafting';
 
-const PANEL_WIDTH = 428;
-const PANEL_HEIGHT = 316;
-const SLOT_SIZE = 36;
-const SLOT_GAP = 4;
+const UI_SCALE = 2;
+const SOURCE_PANEL_WIDTH = 166;
+const SOURCE_PANEL_HEIGHT = 158;
+const PANEL_WIDTH = SOURCE_PANEL_WIDTH * UI_SCALE;
+const PANEL_HEIGHT = SOURCE_PANEL_HEIGHT * UI_SCALE;
+const SLOT_SIZE = 18 * UI_SCALE;
 const ICON_SIZE = 26;
-const MAIN_X = 36;
-const MAIN_Y = 130;
-const HOTBAR_Y = 258;
-const CRAFT_X = 232;
-const CRAFT_Y = 44;
-const RESULT_X = 344;
-const RESULT_Y = 64;
+const MAIN_X = 4 * UI_SCALE;
+const MAIN_Y = 76 * UI_SCALE;
+const HOTBAR_Y = 140 * UI_SCALE;
+const CRAFT_X = 91 * UI_SCALE;
+const CRAFT_Y = 18 * UI_SCALE;
+const RESULT_X = 145 * UI_SCALE;
+const RESULT_Y = 29 * UI_SCALE;
 
 type SlotKind = 'inventory' | 'crafting' | 'result';
 
@@ -42,6 +45,7 @@ interface SlotView {
 export class InventoryView {
   readonly container = new Container();
   private readonly panel = new Graphics();
+  private readonly background = new Sprite(inventoryPanelTexture());
   private readonly slotViews: SlotView[] = [];
   private readonly cursor = new Container();
   private readonly cursorIcon = new Sprite(Texture.EMPTY);
@@ -67,13 +71,12 @@ export class InventoryView {
     this.container.addChild(backdrop);
     this.container.addChild(this.panel);
 
-    this.addTitle('Inventory', MAIN_X, 108);
-    this.addTitle('Crafting', CRAFT_X, 22);
+    this.background.setSize(PANEL_WIDTH, PANEL_HEIGHT);
+    this.panel.addChild(this.background);
 
     this.createInventorySlots();
     this.createCraftingSlots();
     this.createResultSlot();
-    this.drawArrow();
     this.createCursor();
     this.update();
   }
@@ -113,7 +116,6 @@ export class InventoryView {
   }
 
   update(): void {
-    this.drawPanel();
     for (const slot of this.slotViews) {
       const item = this.itemForSlot(slot);
       this.drawSlot(slot.frame, slot.kind === 'result');
@@ -126,17 +128,12 @@ export class InventoryView {
     for (let row = 0; row < MAIN_INVENTORY_ROWS; row++) {
       for (let col = 0; col < INVENTORY_COLUMNS; col++) {
         const index = HOTBAR_SIZE + row * INVENTORY_COLUMNS + col;
-        this.createSlot(
-          'inventory',
-          index,
-          MAIN_X + col * (SLOT_SIZE + SLOT_GAP),
-          MAIN_Y + row * (SLOT_SIZE + SLOT_GAP),
-        );
+        this.createSlot('inventory', index, MAIN_X + col * SLOT_SIZE, MAIN_Y + row * SLOT_SIZE);
       }
     }
 
     for (let col = 0; col < HOTBAR_SIZE; col++) {
-      this.createSlot('inventory', col, MAIN_X + col * (SLOT_SIZE + SLOT_GAP), HOTBAR_Y);
+      this.createSlot('inventory', col, MAIN_X + col * SLOT_SIZE, HOTBAR_Y);
     }
   }
 
@@ -144,12 +141,7 @@ export class InventoryView {
     for (let i = 0; i < CRAFTING_GRID_SIZE; i++) {
       const col = i % 2;
       const row = Math.floor(i / 2);
-      this.createSlot(
-        'crafting',
-        i,
-        CRAFT_X + col * (SLOT_SIZE + SLOT_GAP),
-        CRAFT_Y + row * (SLOT_SIZE + SLOT_GAP),
-      );
+      this.createSlot('crafting', i, CRAFT_X + col * SLOT_SIZE, CRAFT_Y + row * SLOT_SIZE);
     }
   }
 
@@ -195,57 +187,8 @@ export class InventoryView {
     this.container.addChild(this.cursor);
   }
 
-  private addTitle(text: string, x: number, y: number): void {
-    const title = new Text({
-      text,
-      style: { fill: '#303030', fontFamily: 'monospace', fontSize: 14 },
-    });
-    title.position.set(x, y);
-    this.panel.addChild(title);
-  }
-
-  private drawPanel(): void {
-    this.panel
-      .clear()
-      .rect(0, 0, PANEL_WIDTH, PANEL_HEIGHT)
-      .fill(0xc6c6c6)
-      .stroke({ width: 4, color: 0x2d2d2d })
-      .rect(6, 6, PANEL_WIDTH - 12, PANEL_HEIGHT - 12)
-      .stroke({ width: 2, color: 0xffffff })
-      .rect(18, 42, 124, 66)
-      .fill(0x5b5f67)
-      .stroke({ width: 2, color: 0x2d2d2d });
-
-    this.panel
-      .rect(74, 54, 18, 18)
-      .fill(0xc98e6d)
-      .rect(71, 72, 24, 28)
-      .fill(0x1fa4a0)
-      .rect(71, 100, 24, 8)
-      .fill(0x3d3a8f);
-  }
-
-  private drawArrow(): void {
-    const arrow = new Graphics();
-    arrow
-      .rect(314, 74, 18, 8)
-      .fill(0x7a7a7a)
-      .moveTo(332, 64)
-      .lineTo(350, 78)
-      .lineTo(332, 92)
-      .closePath()
-      .fill(0x7a7a7a);
-    this.panel.addChild(arrow);
-  }
-
-  private drawSlot(frame: Graphics, result: boolean): void {
-    frame
-      .clear()
-      .rect(0, 0, SLOT_SIZE, SLOT_SIZE)
-      .fill(result ? 0xe3e3e3 : 0x8b8b8b)
-      .stroke({ width: 2, color: 0x373737 })
-      .rect(2, 2, SLOT_SIZE - 4, SLOT_SIZE - 4)
-      .stroke({ width: 1, color: 0xd8d8d8 });
+  private drawSlot(frame: Graphics, _result: boolean): void {
+    frame.clear().rect(0, 0, SLOT_SIZE, SLOT_SIZE).fill({ color: 0xffffff, alpha: 0.001 });
   }
 
   private drawItem(icon: Sprite, count: Text, slot: InventorySlot | null): void {
@@ -342,4 +285,12 @@ function canAcceptResult(cursor: InventorySlot | null, result: InventorySlot): b
 function addToCursor(cursor: InventorySlot | null, result: InventorySlot): InventorySlot {
   if (!cursor) return { ...result };
   return { blockId: cursor.blockId, count: cursor.count + result.count };
+}
+
+function inventoryPanelTexture(): Texture {
+  const base = uiTexture(UI_TEXTURES.inventory);
+  return new Texture({
+    source: base.source,
+    frame: new Rectangle(0, 0, SOURCE_PANEL_WIDTH, SOURCE_PANEL_HEIGHT),
+  });
 }

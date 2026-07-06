@@ -1,4 +1,4 @@
-import { Graphics } from 'pixi.js';
+import type { Graphics } from 'pixi.js';
 import type { MiningState } from '@/world/mining';
 import { miningStage } from '@/world/mining';
 

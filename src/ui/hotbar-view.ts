@@ -2,11 +2,15 @@ import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import type { Inventory } from './inventory';
 import type { BlockRegistry } from '@/blocks/registry';
 import type { BlockAtlas } from '@/render/texture-atlas';
+import { UI_TEXTURES, uiTexture } from '@/render/ui-assets';
 
-const SLOT_SIZE = 40;
-const SLOT_GAP = 4;
-const ICON_SIZE = 28;
-const BOTTOM_MARGIN = 18;
+const UI_SCALE = 2;
+const SOURCE_WIDTH = 240;
+const SOURCE_HEIGHT = 29;
+const SOURCE_SLOT_PITCH = SOURCE_WIDTH / 9;
+const SLOT_SIZE = SOURCE_SLOT_PITCH * UI_SCALE;
+const ICON_SIZE = 32;
+const BOTTOM_MARGIN = 16;
 
 interface SlotView {
   readonly frame: Graphics;
@@ -17,6 +21,8 @@ interface SlotView {
 
 export class HotbarView {
   readonly container = new Container();
+  private readonly background = new Sprite(uiTexture(UI_TEXTURES.hotbar));
+  private readonly selection = new Sprite(uiTexture(UI_TEXTURES.hotbarSelection));
   private readonly slots: SlotView[] = [];
 
   constructor(
@@ -25,6 +31,12 @@ export class HotbarView {
     private readonly atlas: BlockAtlas,
   ) {
     this.container.label = 'hotbar';
+    this.background.setSize(SOURCE_WIDTH * UI_SCALE, SOURCE_HEIGHT * UI_SCALE);
+    this.container.addChild(this.background);
+
+    this.selection.setSize(24 * UI_SCALE, 23 * UI_SCALE);
+    this.container.addChild(this.selection);
+
     for (let i = 0; i < this.inventory.hotbarSize; i++) {
       this.slots.push(this.createSlot(i));
     }
@@ -32,11 +44,9 @@ export class HotbarView {
   }
 
   layout(viewportWidth: number, viewportHeight: number): void {
-    const totalWidth =
-      this.inventory.hotbarSize * SLOT_SIZE + (this.inventory.hotbarSize - 1) * SLOT_GAP;
     this.container.position.set(
-      Math.round((viewportWidth - totalWidth) / 2),
-      Math.round(viewportHeight - SLOT_SIZE - BOTTOM_MARGIN),
+      Math.round((viewportWidth - SOURCE_WIDTH * UI_SCALE) / 2),
+      Math.round(viewportHeight - SOURCE_HEIGHT * UI_SCALE - BOTTOM_MARGIN),
     );
   }
 
@@ -44,7 +54,10 @@ export class HotbarView {
     for (let i = 0; i < this.slots.length; i++) {
       const view = this.slots[i];
       if (!view) continue;
-      this.drawFrame(view.frame, i === this.inventory.selectedIndex);
+      view.frame.clear();
+      if (i === this.inventory.selectedIndex) {
+        this.selection.position.set(i * SLOT_SIZE, 3 * UI_SCALE);
+      }
 
       const slot = this.inventory.slot(i);
       if (!slot) {
@@ -67,7 +80,7 @@ export class HotbarView {
 
   private createSlot(index: number): SlotView {
     const slot = new Container();
-    slot.position.set(index * (SLOT_SIZE + SLOT_GAP), 0);
+    slot.position.set(index * SLOT_SIZE, 4 * UI_SCALE);
 
     const frame = new Graphics();
     slot.addChild(frame);
@@ -90,18 +103,10 @@ export class HotbarView {
       style: { fill: '#ffffff', fontFamily: 'monospace', fontSize: 12 },
     });
     count.anchor.set(1, 1);
-    count.position.set(SLOT_SIZE - 4, SLOT_SIZE - 3);
+    count.position.set(SLOT_SIZE - 8, SLOT_SIZE - 7);
     slot.addChild(count);
 
     this.container.addChild(slot);
     return { frame, icon, count, key };
-  }
-
-  private drawFrame(frame: Graphics, selected: boolean): void {
-    frame
-      .clear()
-      .rect(0, 0, SLOT_SIZE, SLOT_SIZE)
-      .fill(selected ? 0x3a4050 : 0x171a20)
-      .stroke({ width: selected ? 3 : 1, color: selected ? 0xf4d35e : 0x6b7280 });
   }
 }
