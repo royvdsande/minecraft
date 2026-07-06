@@ -6,6 +6,7 @@ import {
   GRAVITY,
   JUMP_SPEED,
   MOVE_SPEED,
+  SPRINT_SPEED,
   MAX_FALL_SPEED,
   type Kinematic,
   type MoveInput,
@@ -116,6 +117,20 @@ describe('stepPhysics', () => {
     );
     expect(s.vx).toBeCloseTo(MOVE_SPEED);
     expect(s.x).toBeGreaterThan(0.5);
+  });
+
+  it('sprints horizontally when sprint input is held', () => {
+    const start: Kinematic = { x: 0.5, y: 10, vx: 0, vy: 0, grounded: true };
+    const s = stepPhysics(
+      start,
+      W,
+      H,
+      { left: false, right: true, jump: false, sprint: true },
+      1 / 60,
+      floorAt(10),
+    );
+    expect(s.vx).toBeCloseTo(SPRINT_SPEED);
+    expect(s.vx).toBeGreaterThan(MOVE_SPEED);
   });
 
   it('cannot walk through a wall', () => {

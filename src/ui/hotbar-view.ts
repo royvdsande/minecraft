@@ -25,14 +25,15 @@ export class HotbarView {
     private readonly atlas: BlockAtlas,
   ) {
     this.container.label = 'hotbar';
-    for (let i = 0; i < this.inventory.size; i++) {
+    for (let i = 0; i < this.inventory.hotbarSize; i++) {
       this.slots.push(this.createSlot(i));
     }
     this.update();
   }
 
   layout(viewportWidth: number, viewportHeight: number): void {
-    const totalWidth = this.inventory.size * SLOT_SIZE + (this.inventory.size - 1) * SLOT_GAP;
+    const totalWidth =
+      this.inventory.hotbarSize * SLOT_SIZE + (this.inventory.hotbarSize - 1) * SLOT_GAP;
     this.container.position.set(
       Math.round((viewportWidth - totalWidth) / 2),
       Math.round(viewportHeight - SLOT_SIZE - BOTTOM_MARGIN),

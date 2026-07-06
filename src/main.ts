@@ -15,6 +15,8 @@ import { GameLoop } from './core/loop';
 import { TICK_RATE, WORLD_HEIGHT } from './core/constants';
 import { Inventory } from './ui/inventory';
 import { HotbarView } from './ui/hotbar-view';
+import { InventoryView } from './ui/inventory-view';
+import type { CraftingRecipe } from './ui/crafting';
 import { deserializeGame, serializeGame } from './storage/save-data';
 import { loadSavedGame, openSaveDatabase, saveGame } from './storage/indexed-db';
 import {
@@ -63,6 +65,7 @@ async function main(): Promise<void> {
   const world = new World(registry, generator);
   for (const chunk of loadedGame?.chunks ?? []) world.setChunk(chunk);
   const inventory = new Inventory();
+  const craftingRecipes = createCraftingRecipes(registry);
   let survival = createSurvivalState();
 
   const camera = new Camera(32);
@@ -136,11 +139,6 @@ async function main(): Promise<void> {
   const keyboard = new Keyboard();
   const mouse = new Mouse(app.canvas);
 
-  window.addEventListener('keydown', (e) => {
-    const m = /^Digit([1-9])$/.exec(e.code);
-    if (m) inventory.select(Number(m[1]) - 1);
-  });
-
   const hud = new Text({
     text: '',
     style: { fill: '#ffffff', fontFamily: 'monospace', fontSize: 14 },
@@ -151,6 +149,25 @@ async function main(): Promise<void> {
   const hotbarView = new HotbarView(inventory, registry, atlas);
   app.stage.addChild(hotbarView.container);
 
+  const inventoryView = new InventoryView(inventory, registry, atlas, craftingRecipes);
+  app.stage.addChild(inventoryView.container);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyE' && !e.repeat) {
+      e.preventDefault();
+      inventoryView.toggle();
+      return;
+    }
+    if (e.code === 'Escape' && inventoryView.isOpen) {
+      e.preventDefault();
+      inventoryView.setOpen(false);
+      return;
+    }
+
+    const m = /^Digit([1-9])$/.exec(e.code);
+    if (m && !inventoryView.isOpen) inventory.select(Number(m[1]) - 1);
+  });
+
   const isSolid = (bx: number, by: number): boolean => world.isSolid(bx, by);
 
   // Current mouse target, recomputed each tick for rendering the highlight.
@@ -159,9 +176,10 @@ async function main(): Promise<void> {
   const loop = new GameLoop({
     update: (dt) => {
       player.savePrev();
-      const moveInput = survival.alive
-        ? keyboard.moveInput
-        : { left: false, right: false, jump: false };
+      const moveInput =
+        survival.alive && !inventoryView.isOpen
+          ? keyboard.moveInput
+          : { left: false, right: false, jump: false, sprint: false };
       const next = stepPhysics(player, Player.WIDTH, Player.HEIGHT, moveInput, dt, isSolid);
       player.x = next.x;
       player.y = next.y;
@@ -190,14 +208,16 @@ async function main(): Promise<void> {
 
       // Cycle selection with the wheel.
       const wheel = mouse.takeWheelSteps();
-      if (wheel !== 0) {
+      if (wheel !== 0 && !inventoryView.isOpen) {
         inventory.cycleSelected(wheel);
       }
 
       // Resolve the targeted cell and handle break/place.
       const leftClick = mouse.takeLeftClick();
       const rightClick = mouse.takeRightClick();
-      if (mouse.hasPosition) {
+      if (inventoryView.isOpen) {
+        target = null;
+      } else if (mouse.hasPosition) {
         const wp = camera.screenToWorld(mouse.x, mouse.y);
         const bx = Math.floor(wp.x);
         const by = Math.floor(wp.y);
@@ -273,6 +293,9 @@ async function main(): Promise<void> {
 
       hotbarView.layout(viewport.width, viewport.height);
       hotbarView.update();
+      inventoryView.layout(viewport.width, viewport.height);
+      if (mouse.hasPosition) inventoryView.setPointer(mouse.x, mouse.y);
+      inventoryView.update();
 
       if (target) {
         highlight.visible = true;
@@ -283,7 +306,7 @@ async function main(): Promise<void> {
       }
 
       hud.text =
-        `Minecraft 2D — M8: survival loop (seed ${seed})\n` +
+        `Minecraft 2D — post-M8: sprint + inventory crafting (seed ${seed})\n` +
         `${saveStatus}\n` +
         `health: ${formatStat(survival.health)}/${MAX_HEALTH}  hunger: ${formatStat(survival.hunger)}/${MAX_HUNGER}  time: ${dayPhaseLabel(survival.dayTime)}\n` +
         `selected: ${selectedLabel(inventory, registry)}\n` +
@@ -301,6 +324,7 @@ async function main(): Promise<void> {
       generator,
       chunkStreamer,
       inventory,
+      inventoryView,
       saveNow,
       getSurvival: () => survival,
     };
@@ -315,6 +339,15 @@ function findLandColumn(generator: TerrainGenerator): number {
     if (generator.surfaceHeight(bx) < SEA_LEVEL - 1) return bx;
   }
   return 0;
+}
+
+function createCraftingRecipes(registry: ReturnType<typeof createBlockRegistry>): CraftingRecipe[] {
+  return [
+    {
+      ingredients: [registry.idOf('oak_log')],
+      result: { blockId: registry.idOf('oak_planks'), count: 4 },
+    },
+  ];
 }
 
 /** Placeholder look: head/torso/legs rectangles in block units at feet-center. */

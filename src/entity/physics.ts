@@ -16,6 +16,7 @@ export interface MoveInput {
   left: boolean;
   right: boolean;
   jump: boolean;
+  sprint?: boolean;
 }
 
 /** Mutable motion state of an entity (anchor = feet-center, see CLAUDE.md). */
@@ -31,6 +32,7 @@ export interface Kinematic {
 // Tuning (blocks / seconds). Chosen so a jump clears ~1.25 blocks and the
 // terminal fall speed keeps per-tick motion well under one block at 60 Hz.
 export const MOVE_SPEED = 4.3;
+export const SPRINT_SPEED = 5.6;
 export const JUMP_SPEED = 9;
 export const GRAVITY = 32;
 export const MAX_FALL_SPEED = 40;
@@ -114,7 +116,9 @@ export function stepPhysics(
   isSolid: SolidQuery,
 ): Kinematic {
   // Horizontal velocity follows input directly for responsive controls.
-  let vx = ((input.right ? 1 : 0) - (input.left ? 1 : 0)) * MOVE_SPEED;
+  const movingHorizontally = input.left !== input.right;
+  const moveSpeed = input.sprint === true && movingHorizontally ? SPRINT_SPEED : MOVE_SPEED;
+  let vx = ((input.right ? 1 : 0) - (input.left ? 1 : 0)) * moveSpeed;
   let vy = k.vy;
 
   if (input.jump && k.grounded) vy = -JUMP_SPEED;

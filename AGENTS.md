@@ -166,12 +166,14 @@ reviewbare commit met duidelijke message. STOP na M8 en overleg met mij.
 - **M7** ✅ Save/load via IndexedDB.
 - **M8** ✅ Basis survival-loop: health, honger, fall damage, dag/nacht-cyclus.
 
-**Later (niet nu):** structures, crafting, mobs, water-fysica, redstone, enz.
+**Later (niet nu):** structures, mobs, water-fysica, redstone, enz.
 
 ### Huidige milestone
 
-**M8 — basis survival-loop: KLAAR.** STOP hier en overleg vóór latere features
-(structures, crafting, mobs, water-fysica, redstone, enz.).
+**Post-M8 gebruikersstap — sprint + inventory/crafting: KLAAR.** Na overleg is
+een kleine post-M8 stap toegevoegd: sprinten met Shift, inventory openen/sluiten
+met E/Esc, en een survival-inventory-overlay met 2x2 crafting. Stop opnieuw vóór
+grotere latere features (structures, mobs, water-fysica, redstone, enz.).
 
 Seed: random bij opstart, getoond in de HUD (per-wereld-seed komt bij save/load
 in M7). Generatie-tuning staat als constanten boven in `src/gen/terrain.ts`
@@ -182,11 +184,18 @@ viewportbreedte plus preload-marge. `World` houdt gegenereerde chunk-data in
 geheugen, zodat break/place-edits behouden blijven wanneer een `ChunkView`
 unloadt en later opnieuw wordt aangemaakt. Echte persistentie blijft M7.
 
-Inventory is pure logica in `src/ui/inventory.ts`: 9 hotbar-slots, stack-size 64,
-selectie via slot-index/wiel, en break/place gebruikt block-register `drops`.
-Breken voegt drops direct toe aan de inventory als er stackruimte is; plaatsen
-verbruikt één item uit de geselecteerde stack. De oude tijdelijke `PALETTE` in
-`src/main.ts` is vervangen.
+Inventory is pure logica in `src/ui/inventory.ts`: 9 hotbar-slots + 27 storage
+slots, stack-size 64, selectie via slot-index/wiel, en break/place gebruikt
+block-register `drops`. Breken voegt drops direct toe aan de inventory als er
+stackruimte is; plaatsen verbruikt één item uit de geselecteerde hotbar-stack.
+`src/ui/inventory-view.ts` rendert de survival-inventory als Pixi-overlay met
+2x2 crafting-grid en result-slot. Crafting-recepten staan data-driven in
+`src/ui/crafting.ts`; de eerste recipe is `oak_log` → 4× `oak_planks`.
+
+De gevraagde Minecraft-wiki GUI-textures zijn niet gedownload of in de repo
+gekopieerd. De overlay tekent een pixel-art GUI in dezelfde inventaris-indeling,
+zodat het project schoon blijft en later eventueel eigen/legale GUI-assets kan
+inladen.
 
 Save/load gebruikt IndexedDB (`minecraft-2d` / `saves` / `default`) en bewaart
 de wereld-seed plus alle cached chunks als `Uint16Array`-blockdata. Bij startup
@@ -204,8 +213,9 @@ Let op (tijdelijk):
   nodig is. De preload-marge voorkomt zichtbare gaten; als terrain zwaarder
   wordt, kan generatie later over ticks worden uitgesmeerd.
 - Inventory en spelerpositie zijn nog sessie-geheugen; M7 bewaart bewust seed +
-  chunkdata/edits. Er zijn nog geen losse item-entities op de grond; drops
-  worden direct opgepakt als er ruimte is.
+  chunkdata/edits. Crafting-grid-inhoud, cursor-stack en open/dicht-status
+  worden ook nog niet opgeslagen. Er zijn nog geen losse item-entities op de
+  grond; drops worden direct opgepakt als er ruimte is.
 - Survival-state (health, hunger, dagtijd) wordt nog niet opgeslagen; M7 bewaart
   alleen seed + chunks. Eten/cooking/regen-items komen pas met latere
   crafting/food-systemen.

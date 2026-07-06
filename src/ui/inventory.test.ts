@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { HOTBAR_SIZE, Inventory, MAX_STACK_SIZE } from './inventory';
+import {
+  CRAFTING_GRID_SIZE,
+  HOTBAR_SIZE,
+  Inventory,
+  MAX_STACK_SIZE,
+  PLAYER_INVENTORY_SIZE,
+} from './inventory';
 
 describe('Inventory', () => {
-  it('starts with empty hotbar slots and selected slot 0', () => {
+  it('starts with empty player inventory and crafting slots', () => {
     const inventory = new Inventory();
 
-    expect(inventory.size).toBe(HOTBAR_SIZE);
+    expect(inventory.size).toBe(PLAYER_INVENTORY_SIZE);
+    expect(inventory.hotbarSize).toBe(HOTBAR_SIZE);
     expect(inventory.selectedIndex).toBe(0);
-    expect(inventory.snapshot()).toEqual(Array.from({ length: HOTBAR_SIZE }, () => null));
+    expect(inventory.snapshot()).toEqual(Array.from({ length: PLAYER_INVENTORY_SIZE }, () => null));
+    expect(inventory.craftingSnapshot()).toEqual(
+      Array.from({ length: CRAFTING_GRID_SIZE }, () => null),
+    );
   });
 
   it('selects and cycles slots with wrapping', () => {
@@ -69,14 +79,42 @@ describe('Inventory', () => {
     expect(inventory.consumeSelected()).toBeNull();
   });
 
+  it('sets inventory and crafting slots defensively', () => {
+    const inventory = new Inventory();
+    const stack = { blockId: 3, count: 2 };
+
+    inventory.setSlot(12, stack);
+    inventory.setCraftingSlot(1, stack);
+    stack.count = 99;
+
+    expect(inventory.slot(12)).toEqual({ blockId: 3, count: 2 });
+    expect(inventory.craftingSlot(1)).toEqual({ blockId: 3, count: 2 });
+  });
+
+  it('consumes crafting ingredients one item at a time', () => {
+    const inventory = new Inventory();
+    inventory.setCraftingSlot(0, { blockId: 4, count: 2 });
+
+    expect(inventory.consumeCraftingSlot(0)).toBe(4);
+    expect(inventory.craftingSlot(0)).toEqual({ blockId: 4, count: 1 });
+
+    expect(inventory.consumeCraftingSlot(0)).toBe(4);
+    expect(inventory.craftingSlot(0)).toBeNull();
+  });
+
   it('rejects invalid slots, items, counts, and cycle deltas', () => {
     const inventory = new Inventory();
 
     expect(() => new Inventory(0)).toThrow(RangeError);
     expect(() => new Inventory(1, 0)).toThrow(RangeError);
     expect(() => inventory.select(HOTBAR_SIZE)).toThrow(RangeError);
+    expect(() => inventory.setSlot(PLAYER_INVENTORY_SIZE, null)).toThrow(RangeError);
+    expect(() => inventory.setCraftingSlot(CRAFTING_GRID_SIZE, null)).toThrow(RangeError);
     expect(() => inventory.add(0)).toThrow(RangeError);
     expect(() => inventory.add(1, 0)).toThrow(RangeError);
+    expect(() => inventory.setSlot(0, { blockId: 1, count: MAX_STACK_SIZE + 1 })).toThrow(
+      RangeError,
+    );
     expect(() => inventory.cycleSelected(0.5)).toThrow(RangeError);
   });
 });

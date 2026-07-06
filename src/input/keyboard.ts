@@ -11,6 +11,7 @@ export class Keyboard {
   private static readonly LEFT = ['ArrowLeft', 'KeyA'];
   private static readonly RIGHT = ['ArrowRight', 'KeyD'];
   private static readonly JUMP = ['ArrowUp', 'KeyW', 'Space'];
+  private static readonly SPRINT = ['ShiftLeft', 'ShiftRight'];
 
   constructor(private readonly target: Window = window) {
     this.target.addEventListener('keydown', this.onKeyDown);
@@ -29,7 +30,10 @@ export class Keyboard {
 
   private isBound(code: string): boolean {
     return (
-      Keyboard.LEFT.includes(code) || Keyboard.RIGHT.includes(code) || Keyboard.JUMP.includes(code)
+      Keyboard.LEFT.includes(code) ||
+      Keyboard.RIGHT.includes(code) ||
+      Keyboard.JUMP.includes(code) ||
+      Keyboard.SPRINT.includes(code)
     );
   }
 
@@ -42,6 +46,7 @@ export class Keyboard {
       left: this.any(Keyboard.LEFT),
       right: this.any(Keyboard.RIGHT),
       jump: this.any(Keyboard.JUMP),
+      sprint: this.any(Keyboard.SPRINT),
     };
   }
 
