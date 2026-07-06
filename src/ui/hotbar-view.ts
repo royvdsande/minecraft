@@ -7,16 +7,16 @@ import { UI_TEXTURES, uiTexture } from '@/render/ui-assets';
 const UI_SCALE = 2;
 const SOURCE_WIDTH = 240;
 const SOURCE_HEIGHT = 29;
-const SOURCE_SLOT_PITCH = SOURCE_WIDTH / 9;
-const SLOT_SIZE = SOURCE_SLOT_PITCH * UI_SCALE;
+const SOURCE_SLOT_SIZE = 24;
+const SLOT_SIZE = SOURCE_SLOT_SIZE * UI_SCALE;
 const ICON_SIZE = 32;
 const BOTTOM_MARGIN = 16;
+const HOTBAR_SLOT_SOURCE_X = [3, 29, 56, 82, 109, 135, 161, 188, 214] as const;
 
 interface SlotView {
   readonly frame: Graphics;
   readonly icon: Sprite;
   readonly count: Text;
-  readonly key: Text;
 }
 
 export class HotbarView {
@@ -56,7 +56,7 @@ export class HotbarView {
       if (!view) continue;
       view.frame.clear();
       if (i === this.inventory.selectedIndex) {
-        this.selection.position.set(i * SLOT_SIZE, 3 * UI_SCALE);
+        this.selection.position.set((this.sourceXForSlot(i) - 2) * UI_SCALE, 1 * UI_SCALE);
       }
 
       const slot = this.inventory.slot(i);
@@ -80,7 +80,7 @@ export class HotbarView {
 
   private createSlot(index: number): SlotView {
     const slot = new Container();
-    slot.position.set(index * SLOT_SIZE, 4 * UI_SCALE);
+    slot.position.set(this.sourceXForSlot(index) * UI_SCALE, 3 * UI_SCALE);
 
     const frame = new Graphics();
     slot.addChild(frame);
@@ -91,13 +91,6 @@ export class HotbarView {
     icon.visible = false;
     slot.addChild(icon);
 
-    const key = new Text({
-      text: String(index + 1),
-      style: { fill: '#cfd6e6', fontFamily: 'monospace', fontSize: 10 },
-    });
-    key.position.set(4, 2);
-    slot.addChild(key);
-
     const count = new Text({
       text: '',
       style: { fill: '#ffffff', fontFamily: 'monospace', fontSize: 12 },
@@ -107,6 +100,12 @@ export class HotbarView {
     slot.addChild(count);
 
     this.container.addChild(slot);
-    return { frame, icon, count, key };
+    return { frame, icon, count };
+  }
+
+  private sourceXForSlot(index: number): number {
+    const sourceX = HOTBAR_SLOT_SOURCE_X[index];
+    if (sourceX === undefined) throw new RangeError(`Hotbar slot out of range: ${index}`);
+    return sourceX;
   }
 }

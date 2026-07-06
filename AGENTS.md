@@ -202,6 +202,9 @@ inventory/hotbar textures als achtergrond; items blijven daar als eigen sprites
 bovenop renderen. `src/render/player-view.ts` snijdt de 64x64 skin atlas op in
 hoofd, torso, armen en benen. De oudere Minecraft-wiki GUI-textures zijn niet
 gedownload of in de repo gekopieerd.
+UI-textures worden expliciet nearest-neighbour geladen. Inventory-items renderen
+op een 2x pixel-art schaal; de hotbar toont geen 1-9 labels meer en gebruikt de
+selectie-sprite als buitenliggende highlight rond het gekozen slot.
 
 Block breaking is nu hold-to-mine: `src/world/mining.ts` bouwt pure mining
 progress op volgens `BlockDef.hardness`, reset bij target-wissel/loslaten, en

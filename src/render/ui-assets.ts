@@ -12,7 +12,16 @@ export function uiTexturePath(file: string): string {
 }
 
 export async function loadUiTextures(): Promise<void> {
-  await Assets.load(Object.values(UI_TEXTURES).map(uiTexturePath));
+  await Assets.load(
+    Object.values(UI_TEXTURES).map((file) => ({
+      alias: uiTexturePath(file),
+      src: uiTexturePath(file),
+      data: { scaleMode: 'nearest' },
+    })),
+  );
+  for (const file of Object.values(UI_TEXTURES)) {
+    uiTexture(file).source.scaleMode = 'nearest';
+  }
 }
 
 export function uiTexture(file: string): Texture {
